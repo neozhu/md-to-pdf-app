@@ -10,6 +10,7 @@ import {
   X,
   Trash2,
   Zap,
+  Github,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -454,6 +455,20 @@ export function MdDashboard() {
                 ) : (
                   <Printer className="size-4" />
                 )}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+              >
+                <a
+                  href="https://github.com/neozhu/md-to-pdf-app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View on GitHub"
+                >
+                  <Github className="size-4" />
+                </a>
               </Button>
 
               <ModeToggle />
