@@ -32,9 +32,8 @@ type ViewMode = "split" | "editor" | "preview";
 
 function WorkbenchHeader({ title }: { title: string }) {
   return (
-    <div className="flex items-center justify-between border-b bg-card px-4 py-2">
-      <div className="text-sm font-medium">{title}</div>
-      <div className="text-xs text-muted-foreground">Markdown</div>
+    <div className="flex h-8 items-center justify-between border-b bg-card px-3">
+      <div className="text-xs font-medium">{title}</div>
     </div>
   );
 }
@@ -54,28 +53,6 @@ function useIsLgUp() {
   return isLgUp;
 }
 
-function SidebarHeader({ rightSlot }: { rightSlot?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b px-4 py-4">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-black text-white shadow-sm">
-          <Zap className="size-4" />
-        </div>
-        <div className="leading-tight">
-          <div className="text-sm font-semibold tracking-tight">Horizon AI</div>
-          <div className="text-xs text-muted-foreground">MD → PDF</div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="rounded-full border bg-secondary px-2 py-1 text-[10px] font-medium tracking-wide">
-          FREE
-        </span>
-        {rightSlot}
-      </div>
-    </div>
-  );
-}
-
 function SidebarShell({
   children,
   className,
@@ -86,7 +63,7 @@ function SidebarShell({
   return (
     <aside
       className={cn(
-        "flex w-[290px] flex-col border bg-card/80 shadow-sm backdrop-blur",
+        "flex w-[260px] flex-col border bg-card",
         className,
       )}
     >
@@ -109,7 +86,9 @@ export function MdDashboard() {
   const [fileName, setFileName] = React.useState(() =>
     mdFileNameToPdfFileName(initialHistoryDocs[0].mdFileName),
   );
-  const [isExporting, setIsExporting] = React.useState(false);
+  const [exportingAction, setExportingAction] = React.useState<
+    "download" | "print" | null
+  >(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
@@ -216,27 +195,27 @@ export function MdDashboard() {
 
   async function onDownload() {
     setError(null);
-    setIsExporting(true);
+    setExportingAction("download");
     try {
       const blob = await requestPdf("attachment");
       downloadBlob(blob);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Download failed.");
     } finally {
-      setIsExporting(false);
+      setExportingAction(null);
     }
   }
 
   async function onPrint() {
     setError(null);
-    setIsExporting(true);
+    setExportingAction("print");
     try {
       const blob = await requestPdf("inline");
       printBlob(blob);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Print failed.");
     } finally {
-      setIsExporting(false);
+      setExportingAction(null);
     }
   }
 
@@ -263,11 +242,12 @@ export function MdDashboard() {
   }
 
   const filteredDocs = history.filteredDocs;
+  const canExport = markdownText.trim().length > 0;
+  const isExporting = exportingAction !== null;
 
   const sidebarContent = (rightSlot?: React.ReactNode) => (
     <>
-      <SidebarHeader rightSlot={rightSlot} />
-      <div className="border-b px-4 py-4">
+      <div className="border-b px-3 py-3">
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={onNewDoc}>
             <Plus className="size-4" />
@@ -276,8 +256,11 @@ export function MdDashboard() {
           <div className="text-xs text-muted-foreground">
             {filteredDocs.length}/{history.docs.length}
           </div>
+          <div className="ml-auto">
+            {rightSlot}
+          </div>
         </div>
-        <div className="mt-3">
+          <div className="mt-2">
           <Input
             value={history.query}
             onChange={(e) => history.setQuery(e.target.value)}
@@ -302,31 +285,38 @@ export function MdDashboard() {
               const isActive = doc.id === history.activeDocId;
               const summary = getMarkdownSummary(doc.markdown, 64);
               return (
-                <button
+                <div
                   key={doc.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectDoc(doc.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectDoc(doc.id);
+                    }
+                  }}
                   aria-current={isActive ? "true" : undefined}
                   className={cn(
-                    "group relative w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                    "group relative w-full rounded-md border px-2.5 py-2 text-left transition-colors",
                     isActive
                       ? "border-primary/40 bg-primary/5"
-                      : "border-transparent hover:border-border hover:bg-accent/35",
+                      : "border-border/40 hover:border-border hover:bg-accent/35",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">
+                      <div className="truncate text-xs font-medium">
                         {doc.mdFileName}
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         {summary || "—"}
                       </div>
                     </div>
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                      className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
                       aria-label={`Delete ${doc.mdFileName}`}
                       onClick={(e) => {
                         e.preventDefault();
@@ -339,9 +329,9 @@ export function MdDashboard() {
                   </div>
 
                   {isActive && (
-                    <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-primary" />
+                    <div className="absolute left-0 top-2 bottom-2 rounded-r bg-primary" />
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -351,87 +341,134 @@ export function MdDashboard() {
   );
 
   return (
-    <div className="min-h-dvh">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_20%,oklch(var(--tech-glow-1)/0.14),transparent_55%),radial-gradient(circle_at_80%_0%,oklch(var(--tech-glow-2)/0.12),transparent_45%)]" />
+    <div className="min-h-dvh text-xs">
+      <div className="relative flex min-h-dvh w-full flex-col">
+        <header className="sticky top-0 z-20 border-b bg-background/70 py-2 backdrop-blur">
+          <div className="flex min-h-[40px] flex-col gap-2 px-4 md:flex-row md:items-center md:justify-between md:px-6">
+            <div className="flex min-w-0 items-center gap-2">
+              {!canSplit && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Open menu"
+                  onClick={() => setIsSidebarOpen(true)}
+                >
+                  <Menu className="size-4" />
+                </Button>
+              )}
 
-      <div className="relative mx-auto flex min-h-dvh max-w-[1500px] flex-col px-4 py-6 md:px-6">
-        <div className="flex min-h-0 flex-1 gap-4">
-          <SidebarShell className="sticky top-6 hidden h-[calc(100dvh-3rem)] lg:flex">
+              <div className="flex items-center gap-2">
+                <div className="flex size-7 items-center justify-center rounded-md bg-foreground text-background">
+                  <Zap className="size-4" />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-tight">
+                  <div className="text-[11px] font-semibold tracking-tight">
+                    MD → PDF
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Minimal Markdown export
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Input
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                className="w-[180px] sm:w-[200px] md:w-[220px]"
+                placeholder="export.pdf"
+                aria-label="PDF file name"
+              />
+
+              {!canSplit && (
+                <div className="flex items-center rounded-lg border bg-card p-1">
+                  <Button
+                    size="sm"
+                    variant={viewMode === "editor" ? "secondary" : "ghost"}
+                    className="rounded-md"
+                    onClick={() => setViewMode("editor")}
+                  >
+                    Editor
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={viewMode === "preview" ? "secondary" : "ghost"}
+                    className="rounded-md"
+                    onClick={() => setViewMode("preview")}
+                  >
+                    Preview
+                  </Button>
+                </div>
+              )}
+
+              <Button
+                variant="secondary"
+                disabled={isExporting || !canExport}
+                onClick={onDownload}
+                className="hidden sm:inline-flex"
+              >
+                {exportingAction === "download" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                Download PDF
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                disabled={isExporting || !canExport}
+                onClick={onDownload}
+                className="sm:hidden"
+                aria-label="Download PDF"
+              >
+                {exportingAction === "download" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                disabled={isExporting || !canExport}
+                onClick={onPrint}
+                className="hidden sm:inline-flex"
+              >
+                {exportingAction === "print" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Printer className="size-4" />
+                )}
+                Print
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={isExporting || !canExport}
+                onClick={onPrint}
+                className="sm:hidden"
+                aria-label="Print"
+              >
+                {exportingAction === "print" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Printer className="size-4" />
+                )}
+              </Button>
+
+              <ModeToggle />
+            </div>
+          </div>
+        </header>
+
+        <div className="relative flex min-h-0 flex-1 px-4 pt-4 md:px-4 lg:pl-[280px]">
+          <SidebarShell className="fixed left-0 top-14 hidden h-[calc(100dvh-3.5rem)] border-r lg:flex">
             {sidebarContent()}
           </SidebarShell>
 
           <main className="flex min-w-0 flex-1 flex-col gap-4">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3">
-                {!canSplit && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    aria-label="Open menu"
-                    onClick={() => setIsSidebarOpen(true)}
-                  >
-                    <Menu className="size-4" />
-                  </Button>
-                )}
-
-                <div className="leading-tight">
-                  <div className="text-base font-semibold tracking-tight">
-                    {history.activeDoc.mdFileName}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Edit, preview, export.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  value={fileName}
-                  onChange={(e) => setFileName(e.target.value)}
-                  className="w-[220px]"
-                  placeholder="export.pdf"
-                  aria-label="PDF file name"
-                />
-
-                {!canSplit && (
-                  <div className="flex items-center rounded-lg border bg-card p-1">
-                    <Button
-                      size="sm"
-                      variant={viewMode === "editor" ? "secondary" : "ghost"}
-                      className="rounded-md"
-                      onClick={() => setViewMode("editor")}
-                    >
-                      Editor
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={viewMode === "preview" ? "secondary" : "ghost"}
-                      className="rounded-md"
-                      onClick={() => setViewMode("preview")}
-                    >
-                      Preview
-                    </Button>
-                  </div>
-                )}
-
-                <Button variant="secondary" disabled={isExporting} onClick={onDownload}>
-                  {isExporting ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Download className="size-4" />
-                  )}
-                  Download PDF
-                </Button>
-
-                <Button variant="outline" disabled={isExporting} onClick={onPrint}>
-                  <Printer className="size-4" />
-                  Print
-                </Button>
-
-                <ModeToggle />
-              </div>
-            </header>
-
             {error && (
               <div className="rounded-lg border border-destructive/30 bg-card px-4 py-3 text-sm">
                 <div className="font-medium text-destructive">Export failed</div>
@@ -439,7 +476,7 @@ export function MdDashboard() {
               </div>
             )}
 
-            <Card className="relative flex min-h-[70dvh] flex-1 overflow-hidden">
+            <Card className="relative flex min-h-[70dvh] flex-1 overflow-hidden rounded-md border shadow-none">
               {canSplit ? (
                 <PanelGroup direction="horizontal">
                   <Panel minSize={25} defaultSize={50}>
@@ -451,7 +488,7 @@ export function MdDashboard() {
                     </div>
                   </Panel>
                   <PanelResizeHandle className="relative w-px bg-border">
-                    <div className="absolute inset-y-0 -left-1 w-2" />
+                    <div className="absolute inset-y-0 -left-2 w-4" />
                   </PanelResizeHandle>
                   <Panel minSize={25} defaultSize={50}>
                     <div className="flex h-full flex-col">
@@ -479,14 +516,9 @@ export function MdDashboard() {
               )}
             </Card>
 
-            <footer className="flex flex-col gap-2 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-              <div>
-                Uses <span className="font-medium text-foreground">md-to-pdf</span>{" "}
-                to render Markdown into a printable PDF.
-              </div>
-              <div className="text-foreground/70">
-                Tip: add frontmatter, tables, and code blocks.
-              </div>
+            <footer className="text-[11px] text-muted-foreground">
+              Uses <span className="font-medium text-foreground">md-to-pdf</span> to
+              render Markdown into a printable PDF.
             </footer>
           </main>
         </div>

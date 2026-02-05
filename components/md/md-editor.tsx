@@ -4,7 +4,7 @@ import * as React from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
 import { useTheme } from "next-themes";
 
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ export function MdEditor({
       <CodeMirror
         value={value}
         height="100%"
-        theme={resolvedTheme === "dark" ? oneDark : undefined}
+        theme={resolvedTheme === "dark" ? vscodeDark : vscodeLight}
         basicSetup={{
           lineNumbers: true,
           foldGutter: true,
