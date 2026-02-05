@@ -1,30 +1,216 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Markdown to PDF Converter
 
-## Getting Started
+A modern, full-featured web application for converting Markdown documents to beautifully formatted PDFs. Built with Next.js 16, featuring real-time preview, syntax highlighting, and professional PDF rendering.
 
-First, run the development server:
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Next.js](https://img.shields.io/badge/Next.js-16.1-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
+
+## ✨ Features
+
+- **Live Preview** - Real-time Markdown preview with syntax highlighting
+- **Split View** - Side-by-side editor and preview with resizable panels
+- **Rich Markdown Support** - Full GFM (GitHub Flavored Markdown) support including tables, task lists, and code blocks
+- **Professional PDF Output** - High-quality PDF generation with customizable styles inspired by shadcn/ui design system
+- **Syntax Highlighting** - Beautiful code syntax highlighting in both preview and PDF using highlight.js
+- **Dark Mode** - Full dark/light theme support with smooth transitions
+- **History Management** - Track and revisit your recent document conversions
+- **Export Options** - Download or view PDF inline
+- **Docker Ready** - Containerized deployment with Docker and Docker Compose
+- **Responsive Design** - Works seamlessly on desktop and mobile devices
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20.x or higher
+- pnpm (recommended) or npm
+- Docker (optional, for containerized deployment)
+
+### Local Development
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/neozhu/md-to-pdf-app.git
+cd md-to-pdf-app
+```
+
+2. **Install dependencies**
+
+```bash
+pnpm install
+```
+
+3. **Run the development server**
 
 ```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. **Open your browser**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Navigate to [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Production Build
 
-## Learn More
+```bash
+pnpm build
+pnpm start
+```
 
-To learn more about Next.js, take a look at the following resources:
+## 🐳 Docker Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Using Docker Compose (Recommended)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Build and start the container
+docker compose up -d
 
-## Deploy on Vercel
+# View logs
+docker compose logs -f
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Stop the container
+docker compose down
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Using Docker CLI
+
+```bash
+# Build the image
+docker build -t md-to-pdf-app .
+
+# Run the container
+docker run -d \
+  --name md-to-pdf-app \
+  --shm-size=2g \
+  --security-opt seccomp:unconfined \
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
+  md-to-pdf-app
+```
+
+The application will be available at [http://localhost:3000](http://localhost:3000)
+
+For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **Next.js 16** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Tailwind CSS 4** - Utility-first styling
+- **shadcn/ui** - Beautiful, accessible UI components
+- **CodeMirror 6** - Advanced Markdown editor with syntax highlighting
+- **React Markdown** - Markdown rendering with rehype/remark plugins
+
+### Backend
+- **Next.js API Routes** - Serverless API endpoints
+- **Puppeteer** - Headless Chrome for PDF generation
+- **marked** - Fast Markdown parser
+- **highlight.js** - Syntax highlighting for code blocks
+
+### Infrastructure
+- **Docker** - Containerization
+- **Google Chrome Stable** - PDF rendering engine
+- **pnpm** - Fast, disk space efficient package manager
+
+## 📁 Project Structure
+
+```
+md-to-pdf-app/
+├── app/                      # Next.js app directory
+│   ├── api/pdf/             # PDF generation API
+│   ├── globals.css          # Global styles & theme
+│   ├── layout.tsx           # Root layout
+│   └── page.tsx             # Home page
+├── components/              # React components
+│   ├── md/                  # Markdown-specific components
+│   │   ├── md-dashboard.tsx
+│   │   ├── md-editor.tsx
+│   │   ├── md-preview.tsx
+│   │   └── md-workbench.tsx
+│   └── ui/                  # shadcn/ui components
+├── lib/                     # Utility functions
+├── public/                  # Static assets
+├── Dockerfile              # Docker configuration
+├── docker-compose.yml      # Docker Compose configuration
+└── package.json            # Dependencies
+```
+
+## 🎨 Features in Detail
+
+### Markdown Editor
+- Powered by CodeMirror 6
+- Syntax highlighting for Markdown
+- Auto-save to local storage
+- Customizable font size and theme
+
+### PDF Styling
+- Professional typography with Inter font family
+- Syntax highlighted code blocks with dark theme
+- Responsive tables with hover effects
+- Clean blockquotes and lists
+- Optimized for A4 paper size
+- Print-friendly page breaks
+
+### Theme Support
+- Seamless light/dark mode switching
+- System preference detection
+- Persistent theme selection
+- Smooth transitions
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Create a `.env.local` file for local development:
+
+```env
+# Optional: Custom Chrome executable path
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# Optional: Node environment
+NODE_ENV=development
+```
+
+### PDF Customization
+
+Modify the PDF styles in [`app/api/pdf/route.ts`](app/api/pdf/route.ts) to customize:
+- Font families and sizes
+- Color schemes
+- Page margins
+- Header/footer styles
+- Code block themes
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [Next.js](https://nextjs.org/) - The React framework
+- [shadcn/ui](https://ui.shadcn.com/) - UI component system
+- [Tailwind CSS](https://tailwindcss.com/) - CSS framework
+- [Puppeteer](https://pptr.dev/) - Headless Chrome automation
+- [highlight.js](https://highlightjs.org/) - Syntax highlighting
+- [CodeMirror](https://codemirror.net/) - Code editor component
+
+## 📧 Contact
+
+For questions or support, please open an issue on [GitHub](https://github.com/neozhu/md-to-pdf-app/issues).
+
+---
+
+**Made with ❤️ using Next.js and TypeScript**
