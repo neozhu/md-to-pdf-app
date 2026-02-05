@@ -1,5 +1,5 @@
-import { MdWorkbench } from "@/components/md/md-workbench";
+import { MdDashboard } from "@/components/md/md-dashboard";
 
 export default function Home() {
-  return <MdWorkbench />;
+  return <MdDashboard />;
 }
