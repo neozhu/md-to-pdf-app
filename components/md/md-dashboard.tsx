@@ -11,6 +11,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import { ModeToggle } from "@/components/mode-toggle";
@@ -89,7 +90,6 @@ export function MdDashboard() {
   const [exportingAction, setExportingAction] = React.useState<
     "download" | "print" | null
   >(null);
-  const [error, setError] = React.useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
   const canSplit = useIsLgUp();
@@ -194,26 +194,24 @@ export function MdDashboard() {
   }
 
   async function onDownload() {
-    setError(null);
     setExportingAction("download");
     try {
       const blob = await requestPdf("attachment");
       downloadBlob(blob);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed.");
+      toast.error(e instanceof Error ? e.message : "Download failed.");
     } finally {
       setExportingAction(null);
     }
   }
 
   async function onPrint() {
-    setError(null);
     setExportingAction("print");
     try {
       const blob = await requestPdf("inline");
       printBlob(blob);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Print failed.");
+      toast.error(e instanceof Error ? e.message : "Print failed.");
     } finally {
       setExportingAction(null);
     }
@@ -469,13 +467,6 @@ export function MdDashboard() {
           </SidebarShell>
 
           <main className="flex min-w-0 flex-1 flex-col gap-4">
-            {error && (
-              <div className="rounded-lg border border-destructive/30 bg-card px-4 py-3 text-sm">
-                <div className="font-medium text-destructive">Export failed</div>
-                <div className="mt-1 text-muted-foreground">{error}</div>
-              </div>
-            )}
-
             <Card className="relative flex min-h-[70dvh] flex-1 overflow-hidden rounded-md border shadow-none">
               {canSplit ? (
                 <PanelGroup direction="horizontal">
