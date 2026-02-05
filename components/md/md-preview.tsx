@@ -67,15 +67,16 @@ export function MdPreview({
           ),
           pre: (props) => (
             <pre
-              className="my-4 overflow-x-auto rounded-lg border border-border bg-muted px-4 py-3 text-xs leading-6"
+              className="my-4 overflow-x-auto rounded-lg !bg-transparent border border-slate-200 dark:border-slate-700 p-4 text-sm leading-relaxed"
               {...props}
             />
           ),
-          code: ({ className, inline, children, ...props }) => {
+          code: ({ className, children, ...props }: any) => {
+            const inline = !className;
             if (inline) {
               return (
                 <code
-                  className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+                  className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 font-mono text-sm text-slate-900 dark:text-slate-100"
                   {...props}
                 >
                   {children}
@@ -84,7 +85,7 @@ export function MdPreview({
             }
 
             return (
-              <code className={cn("font-mono", className)} {...props}>
+              <code className={cn("font-mono !bg-transparent", className)} {...props}>
                 {children}
               </code>
             );

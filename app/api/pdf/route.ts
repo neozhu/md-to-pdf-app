@@ -22,23 +22,34 @@ export async function POST(req: Request) {
     // Use marked to convert markdown to HTML, then puppeteer for PDF
     // This avoids md-to-pdf's highlight.js path resolution issues
     const { marked } = await import("marked");
-    const hljs = await import("highlight.js");
+    const hljs = (await import("highlight.js")).default;
     
-    // Configure marked to use highlight.js for syntax highlighting
-    marked.setOptions({
-      highlight: function(code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-          try {
-            return hljs.highlight(code, { language: lang }).value;
-          } catch (e) {
-            console.error('Highlight error:', e);
-          }
-        }
-        return hljs.highlightAuto(code).value;
-      }
-    });
-    
+    // Convert markdown to HTML
     const htmlContent = await marked(markdown);
+    
+    // Apply syntax highlighting to code blocks
+    const highlightedHtml = htmlContent.replace(
+      /<pre><code(?: class="language-(\w+)")?>([\s\S]*?)<\/code><\/pre>/g,
+      (match, lang, code) => {
+        const decodedCode = code
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+        
+        try {
+          const highlighted = lang && hljs.getLanguage(lang)
+            ? hljs.highlight(decodedCode, { language: lang }).value
+            : hljs.highlightAuto(decodedCode).value;
+          
+          return `<pre><code class="hljs${lang ? ` language-${lang}` : ''}">${highlighted}</code></pre>`;
+        } catch (e) {
+          console.error('Highlight error:', e);
+          return match;
+        }
+      }
+    );
     
     const fullHtml = `
       <!DOCTYPE html>
@@ -101,7 +112,7 @@ export async function POST(req: Request) {
         </head>
         <body>
           <div class="markdown-body">
-            ${htmlContent}
+            ${highlightedHtml}
           </div>
         </body>
       </html>
@@ -110,7 +121,28 @@ export async function POST(req: Request) {
     // Convert HTML to PDF using puppeteer directly
     const puppeteer = await import("puppeteer");
     const browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'],
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-software-rasterizer',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--hide-scrollbars',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-default-browser-check',
+        '--disable-crash-reporter',
+        '--disable-breakpad'
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     });
     
     try {
@@ -133,7 +165,7 @@ export async function POST(req: Request) {
       });
       await browser.close();
 
-      return new NextResponse(pdfBuffer, {
+      return new NextResponse(Buffer.from(pdfBuffer), {
         status: 200,
         headers: {
           "Content-Type": "application/pdf",
