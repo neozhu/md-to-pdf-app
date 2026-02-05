@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ export function MdPreview({
     <div className={cn("h-full overflow-auto p-5", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
         components={{
           h1: (props) => (
             <h1
@@ -63,17 +65,17 @@ export function MdPreview({
           td: (props) => (
             <td className="border border-border px-3 py-2" {...props} />
           ),
-          code: ({ className, children, ...props }) => {
-            const text = String(children ?? "");
-            const isBlock = Boolean(className) || text.includes("\n");
-
-            if (isBlock) {
+          pre: (props) => (
+            <pre
+              className="my-4 overflow-x-auto rounded-lg border border-border bg-muted px-4 py-3 text-xs leading-6"
+              {...props}
+            />
+          ),
+          code: ({ className, inline, children, ...props }) => {
+            if (inline) {
               return (
                 <code
-                  className={cn(
-                    "block overflow-x-auto rounded-lg border border-border bg-muted px-4 py-3 font-mono text-xs leading-6",
-                    className,
-                  )}
+                  className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
                   {...props}
                 >
                   {children}
@@ -82,10 +84,7 @@ export function MdPreview({
             }
 
             return (
-              <code
-                className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
-                {...props}
-              >
+              <code className={cn("font-mono", className)} {...props}>
                 {children}
               </code>
             );
