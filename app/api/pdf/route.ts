@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       { content: markdown },
       {
         pdf_options: { format: "A4", printBackground: true },
-        stylesheet: ["https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/2.10.0/github-markdown.min.css"],
+        stylesheet: ["https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css"],
       }
     );
 
