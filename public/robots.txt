@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://md-to-pdf.blazorserver.com/sitemap.xml

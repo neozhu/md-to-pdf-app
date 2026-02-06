@@ -15,8 +15,73 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MD → PDF",
-  description: "Edit Markdown, preview, download PDF, or print.",
+  metadataBase: new URL("https://md-to-pdf.blazorserver.com"),
+  title: {
+    default: "MD → PDF | Online Markdown to PDF Converter",
+    template: "%s | MD → PDF",
+  },
+  description:
+    "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly. No registration required. Clean interface with live preview and syntax highlighting.",
+  keywords: [
+    "markdown to pdf",
+    "markdown converter",
+    "md to pdf",
+    "markdown editor",
+    "pdf generator",
+    "markdown preview",
+    "online markdown editor",
+    "free markdown converter",
+    "markdown export",
+    "document converter",
+  ],
+  authors: [{ name: "MD → PDF" }],
+  creator: "MD → PDF",
+  publisher: "MD → PDF",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://md-to-pdf.blazorserver.com",
+    title: "MD → PDF | Online Markdown to PDF Converter",
+    description:
+      "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly. No registration required.",
+    siteName: "MD → PDF",
+    images: [
+      {
+        url: "/icon.svg",
+        width: 64,
+        height: 64,
+        alt: "MD → PDF Logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "MD → PDF | Online Markdown to PDF Converter",
+    description:
+      "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly.",
+    images: ["/icon.svg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

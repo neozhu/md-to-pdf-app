@@ -10,7 +10,6 @@ import {
   RefreshCw,
   X,
   Trash2,
-  Zap,
   Github,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,13 +45,13 @@ function formatRelativeTime(updatedAtMs: number) {
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (minutes < 1) return "刚刚";
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
   
-  // 超过7天显示日期（月-日）
-  return new Intl.DateTimeFormat('zh-CN', {
+  // Show date (MM/DD) for older than 7 days
+  return new Intl.DateTimeFormat('en-US', {
     month: '2-digit',
     day: '2-digit',
   }).format(updatedAtMs);
@@ -730,8 +729,13 @@ export function MdDashboard() {
               )}
 
               <div className="flex items-center gap-2">
-                <div className="flex size-7 items-center justify-center rounded-md bg-foreground text-background">
-                  <Zap className="size-4" />
+                <div className="flex size-7 items-center justify-center rounded-md bg-primary overflow-hidden">
+                  <svg width="28" height="28" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="64" height="64" fill="#2563eb"/>
+                    <path d="M16 20C16 18.8954 16.8954 18 18 18H46C47.1046 18 48 18.8954 48 20V44C48 45.1046 47.1046 46 46 46H18C16.8954 46 16 45.1046 16 44V20Z" fill="white"/>
+                    <path d="M22 26L22 38L26 38L26 32L28 35L30 32L30 38L34 38L34 26L30 26L28 30.5L26 26L22 26Z" fill="#2563eb"/>
+                    <path d="M36 26L36 38L40 38L42 35L42 38L46 38L46 26L42 26L40 29L40 26L36 26Z" fill="#2563eb" fillOpacity="0.7"/>
+                  </svg>
                 </div>
                 <div className="flex flex-col gap-0.5 leading-tight">
                   <div className="text-[11px] font-semibold tracking-tight">

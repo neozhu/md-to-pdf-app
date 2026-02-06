@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, History, Loader2, Printer, Sparkles } from "lucide-react";
+import { Download, History, Loader2, Printer } from "lucide-react";
 import { marked } from "marked";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
@@ -581,8 +581,13 @@ export function MdWorkbench() {
       <div className="relative mx-auto flex min-h-dvh max-w-[1400px] flex-col gap-4 px-4 py-6 md:px-6">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl border bg-card shadow-sm">
-              <Sparkles className="size-4 text-foreground" />
+            <div className="flex size-10 items-center justify-center rounded-xl border bg-primary shadow-sm overflow-hidden">
+              <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="64" height="64" fill="#2563eb"/>
+                <path d="M16 20C16 18.8954 16.8954 18 18 18H46C47.1046 18 48 18.8954 48 20V44C48 45.1046 47.1046 46 46 46H18C16.8954 46 16 45.1046 16 44V20Z" fill="white"/>
+                <path d="M22 26L22 38L26 38L26 32L28 35L30 32L30 38L34 38L34 26L30 26L28 30.5L26 26L22 26Z" fill="#2563eb"/>
+                <path d="M36 26L36 38L40 38L42 35L42 38L46 38L46 26L42 26L40 29L40 26L36 26Z" fill="#2563eb" fillOpacity="0.7"/>
+              </svg>
             </div>
             <div className="leading-tight">
               <div className="text-base font-semibold tracking-tight">
