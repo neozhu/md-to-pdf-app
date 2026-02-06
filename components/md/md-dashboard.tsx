@@ -742,7 +742,7 @@ export function MdDashboard() {
                     MD → PDF
                   </div>
                   <div className="text-[10px] text-muted-foreground">
-                    Minimal Markdown export
+                    Write, preview & export to PDF
                   </div>
                 </div>
               </div>
@@ -900,8 +900,16 @@ export function MdDashboard() {
             </Card>
 
             <footer className="text-[11px] text-muted-foreground">
-              Uses <span className="font-medium text-foreground">md-to-pdf</span> to
-              render Markdown into a printable PDF.
+              From Markdown to PDF, beautifully simple. •{" "}
+              <a
+                href="https://github.com/neozhu/md-to-pdf-app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground/60 hover:text-foreground underline underline-offset-2 transition-colors"
+              >
+                Open source on GitHub
+              </a>{" "}
+              — feedback welcome!
             </footer>
           </main>
         </div>

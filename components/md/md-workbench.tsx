@@ -594,7 +594,7 @@ export function MdWorkbench() {
                 MD → PDF
               </div>
               <div className="text-sm text-muted-foreground">
-                Edit, preview, export.
+                Write, preview & export to PDF
               </div>
             </div>
           </div>
@@ -779,8 +779,16 @@ export function MdWorkbench() {
 
         <footer className="flex flex-col gap-2 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
           <div>
-            Uses <span className="font-medium text-foreground">md-to-pdf</span>{" "}
-            to render Markdown into a printable PDF.
+            From Markdown to PDF, beautifully simple. •{" "}
+            <a
+              href="https://github.com/neozhu/md-to-pdf-app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground/60 hover:text-foreground underline underline-offset-2 transition-colors"
+            >
+              Open source on GitHub
+            </a>{" "}
+            — feedback welcome!
           </div>
           <div className="text-foreground/70">
             Tip: add frontmatter, tables, and code blocks.
