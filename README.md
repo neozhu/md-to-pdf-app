@@ -1,3 +1,7 @@
+[![Build](https://github.com/neozhu/md-to-pdf-app/actions/workflows/build.yml/badge.svg)](https://github.com/neozhu/md-to-pdf-app/actions/workflows/build.yml)
+[![Docker Publish](https://github.com/neozhu/md-to-pdf-app/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/neozhu/md-to-pdf-app/actions/workflows/docker-publish.yml)
+[![Flow](https://github.com/neozhu/md-to-pdf-app/actions/workflows/flow.yml/badge.svg)](https://github.com/neozhu/md-to-pdf-app/actions/workflows/flow.yml)
+
 # Markdown to PDF Converter
 
 A modern, full-featured web application for converting Markdown documents to beautifully formatted PDFs. Built with Next.js 16, featuring real-time preview, syntax highlighting, and professional PDF rendering.
