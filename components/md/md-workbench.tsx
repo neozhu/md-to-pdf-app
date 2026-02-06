@@ -363,6 +363,15 @@ export function MdWorkbench() {
               .markdown-body table tr {
                 border-top-color: #d0d7de !important;
               }
+              @media print {
+                .markdown-body table {
+                  border-collapse: collapse !important;
+                }
+                .markdown-body table th,
+                .markdown-body table td {
+                  border: 1px solid #d0d7de !important;
+                }
+              }
             </style>
           </head>
           <body>
