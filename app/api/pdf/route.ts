@@ -156,6 +156,7 @@ export async function POST(req: Request) {
         format: 'A4',
         printBackground: true,
         preferCSSPageSize: true,
+        displayHeaderFooter: false,
         margin: {
           top: '1.5cm',
           right: '1cm',

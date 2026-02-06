@@ -61,6 +61,8 @@ docker rm md-to-pdf-app
 - `NODE_ENV`: 运行环境 (production/development)
 - `PUPPETEER_EXECUTABLE_PATH`: Chrome 可执行文件路径
 - `PORT`: 应用端口 (默认 3000)
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase 项目 URL（用于历史记录持久化）
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase 服务端密钥（仅服务端使用；不要暴露到浏览器）
 
 ## 架构说明
 

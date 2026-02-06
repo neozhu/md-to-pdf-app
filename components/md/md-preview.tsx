@@ -67,7 +67,7 @@ export function MdPreview({
           ),
           pre: (props) => (
             <pre
-              className="my-4 overflow-x-auto rounded-lg !bg-transparent border border-slate-200 dark:border-slate-700 p-4 text-sm leading-relaxed"
+              className="my-4 overflow-x-auto rounded-lg !bg-transparent border border-slate-200 dark:border-slate-700 text-sm leading-relaxed"
               {...props}
             />
           ),

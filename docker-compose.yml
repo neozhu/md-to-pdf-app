@@ -12,6 +12,9 @@ services:
     environment:
       - NODE_ENV=production
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
     # Increase shared memory for Chrome
     shm_size: 2gb
     # Security options for Chrome sandbox

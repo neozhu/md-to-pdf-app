@@ -176,6 +176,11 @@ PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
 # Optional: Node environment
 NODE_ENV=development
+
+# Supabase (MD History persistence)
+# Create the table using docs/supabase/md_history_docs.sql
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 ### PDF Customization

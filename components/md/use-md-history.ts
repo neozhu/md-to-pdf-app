@@ -2,12 +2,7 @@
 
 import * as React from "react";
 
-export type MdHistoryDoc = {
-  id: string;
-  mdFileName: string;
-  markdown: string;
-  updatedAt: number;
-};
+import type { MdHistoryDoc } from "@/lib/md-history";
 
 function pad2(value: number) {
   return value.toString().padStart(2, "0");
@@ -137,6 +132,16 @@ export function useMdHistory(initialDocs: MdHistoryDoc[]) {
 
   function createNew(currentMarkdown: string) {
     const nowMs = Date.now();
+    const active = docs.find((doc) => doc.id === activeDocId);
+    const savedActiveDoc =
+      active && active.markdown !== currentMarkdown
+        ? ({
+            ...active,
+            markdown: currentMarkdown,
+            updatedAt: nowMs,
+          } satisfies MdHistoryDoc)
+        : null;
+
     const nextDoc = {
       id: makeId(),
       mdFileName: makeMdFileName("untitled", nowMs),
@@ -149,17 +154,34 @@ export function useMdHistory(initialDocs: MdHistoryDoc[]) {
       return sortDocsByUpdatedAtDesc([nextDoc, ...saved]);
     });
     setActiveDocId(nextDoc.id);
-    return nextDoc;
+    return { doc: nextDoc, savedActiveDoc };
   }
 
   function switchTo(targetId: string, currentMarkdown: string) {
     const target = docs.find((doc) => doc.id === targetId);
     if (!target) return null;
 
+    // If selecting the same document, don't switch
+    if (targetId === activeDocId) {
+      return null;
+    }
+
     const nowMs = Date.now();
-    setDocs((prev) => saveActiveInList(prev, activeDocId, currentMarkdown, nowMs));
+    const active = docs.find((doc) => doc.id === activeDocId);
+    const savedActiveDoc =
+      active && active.markdown !== currentMarkdown
+        ? ({
+            ...active,
+            markdown: currentMarkdown,
+            updatedAt: nowMs,
+          } satisfies MdHistoryDoc)
+        : null;
+
+    // Immediately update local state before switching
+    const updatedDocs = saveActiveInList(docs, activeDocId, currentMarkdown, nowMs);
+    setDocs(updatedDocs);
     setActiveDocId(targetId);
-    return target;
+    return { doc: target, savedActiveDoc };
   }
 
   function remove(id: string) {
@@ -175,17 +197,43 @@ export function useMdHistory(initialDocs: MdHistoryDoc[]) {
       } satisfies MdHistoryDoc;
       setDocs([nextDoc]);
       setActiveDocId(nextDoc.id);
-      return nextDoc;
+      return { nextActiveDoc: nextDoc, createdDoc: nextDoc };
     }
 
     if (id === activeDocId) {
       setDocs(nextDocs);
       setActiveDocId(nextDocs[0].id);
-      return nextDocs[0];
+      return { nextActiveDoc: nextDocs[0] };
     }
 
     setDocs(nextDocs);
-    return null;
+    return { nextActiveDoc: null };
+  }
+
+  function hydrate(incomingDocs: MdHistoryDoc[]) {
+    if (!incomingDocs || incomingDocs.length === 0) return null;
+
+    const nextDocs = sortDocsByUpdatedAtDesc(incomingDocs);
+    
+    // If we have real docs from database, always use them
+    // Don't keep the initial empty doc
+    const nextActiveId = nextDocs[0]?.id;
+
+    if (!nextActiveId) return null;
+
+    setDocs(nextDocs);
+    setActiveDocId(nextActiveId);
+
+    return nextDocs[0] ?? null;
+  }
+
+  function updateDoc(updatedDoc: MdHistoryDoc) {
+    setDocs((prev) => {
+      const next = prev.map((doc) =>
+        doc.id === updatedDoc.id ? updatedDoc : doc
+      );
+      return sortDocsByUpdatedAtDesc(next);
+    });
   }
 
   return {
@@ -198,5 +246,7 @@ export function useMdHistory(initialDocs: MdHistoryDoc[]) {
     createNew,
     switchTo,
     remove,
+    hydrate,
+    updateDoc,
   };
 }
