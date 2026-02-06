@@ -42,32 +42,6 @@ export function getMarkdownSummary(markdown: string, maxLen = 80) {
   return `${singleLine.slice(0, maxLen - 1)}…`;
 }
 
-export function createDummyHistoryDocs(sampleMarkdown: string, nowMs = Date.now()) {
-  const hour = 60 * 60 * 1000;
-  return [
-    {
-      id: "doc-welcome",
-      mdFileName: "welcome.md",
-      markdown: sampleMarkdown,
-      updatedAt: nowMs - hour * 2,
-    },
-    {
-      id: "doc-notes",
-      mdFileName: "meeting-notes.md",
-      markdown:
-        "# Meeting notes\n\n- Decide on export defaults\n- Add history sidebar\n- Review print layout\n\nNext: wire in persistence.",
-      updatedAt: nowMs - hour * 6,
-    },
-    {
-      id: "doc-template",
-      mdFileName: "template.md",
-      markdown:
-        "# Template\n\n## Overview\n\nWrite a short overview here.\n\n## Details\n\n- Item 1\n- Item 2\n- Item 3\n",
-      updatedAt: nowMs - hour * 26,
-    },
-  ] satisfies MdHistoryDoc[];
-}
-
 function sortDocsByUpdatedAtDesc(docs: MdHistoryDoc[]) {
   return [...docs].sort((a, b) => b.updatedAt - a.updatedAt);
 }
