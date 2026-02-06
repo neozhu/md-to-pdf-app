@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s | MD → PDF",
   },
   description:
-    "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly. No registration required. Clean interface with live preview and syntax highlighting.",
+    "Free online Markdown to PDF converter with AI review and polishing. Edit, preview, optimize with multi-agent AI editing, and export Markdown documents to PDF instantly.",
   keywords: [
     "markdown to pdf",
     "markdown converter",
@@ -33,6 +33,10 @@ export const metadata: Metadata = {
     "free markdown converter",
     "markdown export",
     "document converter",
+    "ai markdown review",
+    "ai markdown editor",
+    "multi-agent ai editing",
+    "markdown polish",
   ],
   authors: [{ name: "MD → PDF" }],
   creator: "MD → PDF",
@@ -48,7 +52,7 @@ export const metadata: Metadata = {
     url: "https://md-to-pdf.blazorserver.com",
     title: "MD → PDF | Online Markdown to PDF Converter",
     description:
-      "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly. No registration required.",
+      "Free online Markdown to PDF converter with AI review and polishing. Edit, preview, optimize with multi-agent AI editing, and export instantly.",
     siteName: "MD → PDF",
     images: [
       {
@@ -63,7 +67,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "MD → PDF | Online Markdown to PDF Converter",
     description:
-      "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly.",
+      "Free online Markdown to PDF converter with AI review and multi-agent polishing.",
     images: ["/icon.svg"],
   },
   robots: {

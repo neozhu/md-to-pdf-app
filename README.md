@@ -22,6 +22,7 @@ A modern, full-featured web application for converting Markdown documents to bea
 - **Syntax Highlighting** - Beautiful code syntax highlighting in both preview and PDF using highlight.js
 - **Dark Mode** - Full dark/light theme support with smooth transitions
 - **History Management** - Track and revisit your recent document conversions
+- **AI Review & Polish (Multi-Agent)** - Two AI agents (Review Pass + Polish Pass) improve clarity, tone, and readability before export
 - **Export Options** - Download or view PDF inline
 - **Docker Ready** - Containerized deployment with Docker and Docker Compose
 - **Responsive Design** - Works seamlessly on desktop and mobile devices
@@ -114,6 +115,7 @@ For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYME
 
 ### Backend
 - **Next.js API Routes** - Serverless API endpoints
+- **Vercel AI SDK + @ai-sdk/openai** - Multi-agent AI review and polishing pipeline
 - **Puppeteer** - Headless Chrome for PDF generation
 - **marked** - Fast Markdown parser
 - **highlight.js** - Syntax highlighting for code blocks
@@ -128,6 +130,7 @@ For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYME
 ```
 md-to-pdf-app/
 ├── app/                      # Next.js app directory
+│   ├── api/ai-review/       # AI review & multi-agent polishing API (SSE progress)
 │   ├── api/pdf/             # PDF generation API
 │   ├── globals.css          # Global styles & theme
 │   ├── layout.tsx           # Root layout
@@ -153,6 +156,11 @@ md-to-pdf-app/
 - Syntax highlighting for Markdown
 - Auto-save to local storage
 - Customizable font size and theme
+
+### AI Review (Multi-Agent)
+- **Review Pass** - Agent 1 analyzes clarity, structure, tone, and grammar and creates an improvement plan
+- **Polish Pass** - Agent 2 rewrites the markdown with controlled edits while preserving meaning and structure
+- **Live Progress** - AI review runs with staged progress updates in the UI and applies the polished markdown automatically
 
 ### PDF Styling
 - Professional typography with Inter font family
@@ -185,6 +193,12 @@ NODE_ENV=development
 # Create the table using docs/supabase/md_history_docs.sql
 NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+
+# OpenAI (AI review & polish)
+OPENAI_API_KEY=
+# Optional
+# OPENAI_MODEL=gpt-4o-mini
+# OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 ### PDF Customization

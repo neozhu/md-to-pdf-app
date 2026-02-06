@@ -7,7 +7,7 @@ export default function Home() {
     name: "MD → PDF",
     url: "https://md-to-pdf.blazorserver.com",
     description:
-      "Free online Markdown to PDF converter. Edit, preview, and export Markdown documents to PDF instantly.",
+      "Free online Markdown to PDF converter with AI review and multi-agent polishing.",
     applicationCategory: "UtilitiesApplication",
     operatingSystem: "Any",
     offers: {
@@ -19,6 +19,8 @@ export default function Home() {
       "Markdown editor with syntax highlighting",
       "Live preview",
       "PDF export",
+      "AI review and polish",
+      "Two-agent writing optimization workflow",
       "Document history",
       "Dark mode support",
     ],

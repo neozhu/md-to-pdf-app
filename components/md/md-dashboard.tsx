@@ -8,6 +8,7 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  WandSparkles,
   X,
   Trash2,
   Github,
@@ -37,6 +38,14 @@ import {
 } from "./use-md-history";
 
 type ViewMode = "split" | "editor" | "preview";
+type AiAgent = "reviewer" | "editor" | null;
+type AiReviewResponse = {
+  review?: string;
+  keyImprovements?: string[];
+  polishedMarkdown?: string;
+  changed?: boolean;
+  error?: string;
+};
 
 function formatRelativeTime(updatedAtMs: number) {
   const now = Date.now();
@@ -161,6 +170,11 @@ export function MdDashboard() {
   const [exportingAction, setExportingAction] = React.useState<
     "download" | "print" | null
   >(null);
+  const [isAiReviewing, setIsAiReviewing] = React.useState(false);
+  const [aiActiveAgent, setAiActiveAgent] = React.useState<AiAgent>(null);
+  const [aiDialogMessage, setAiDialogMessage] = React.useState("");
+  const [aiDialogError, setAiDialogError] = React.useState<string | null>(null);
+  const [isAiDialogOpen, setIsAiDialogOpen] = React.useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
   const canSplit = useIsLgUp();
@@ -470,6 +484,128 @@ export function MdDashboard() {
     }
   }
 
+  async function onAiReview() {
+    if (!markdownText.trim()) {
+      toast.error("Please write some Markdown first.");
+      return;
+    }
+
+    setIsAiReviewing(true);
+    setIsAiDialogOpen(true);
+    setAiDialogError(null);
+    setAiActiveAgent("reviewer");
+    setAiDialogMessage("Reviewer Agent is preparing...");
+
+    try {
+      const res = await fetch("/api/ai-review?stream=1", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({ markdown: markdownText }),
+      });
+
+      if (!res.ok) {
+        const fallback = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(fallback.error ?? `AI review failed (${res.status})`);
+      }
+
+      if (!res.body) {
+        throw new Error("Empty AI response stream.");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: AiReviewResponse | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+          const lines = chunk
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean);
+          if (lines.length === 0) continue;
+
+          const eventLine = lines.find((line) => line.startsWith("event:"));
+          const dataLine = lines.find((line) => line.startsWith("data:"));
+          if (!eventLine || !dataLine) continue;
+
+          const event = eventLine.slice("event:".length).trim();
+          const dataText = dataLine.slice("data:".length).trim();
+          let payload: unknown;
+          try {
+            payload = JSON.parse(dataText);
+          } catch {
+            continue;
+          }
+
+          if (event === "stage") {
+            const stage = payload as {
+              agent?: AiAgent;
+              message?: string;
+              status?: "started" | "completed";
+            };
+            if (stage.agent === "reviewer" || stage.agent === "editor") {
+              setAiActiveAgent(stage.agent);
+            }
+            if (stage.message) {
+              setAiDialogMessage(stage.message);
+            }
+          } else if (event === "result") {
+            finalResult = payload as AiReviewResponse;
+          } else if (event === "error") {
+            const err = payload as { message?: string };
+            throw new Error(err.message || "AI review failed.");
+          }
+        }
+      }
+
+      const data = finalResult ?? {};
+      if (!data.polishedMarkdown || typeof data.polishedMarkdown !== "string") {
+        throw new Error("AI response missing polished markdown.");
+      }
+
+      didUserEditRef.current = true;
+      setMarkdownText(data.polishedMarkdown);
+
+      const summary = data.review?.trim() || "Document polished by AI editor.";
+      const detail = Array.isArray(data.keyImprovements)
+        ? data.keyImprovements.slice(0, 3).join(" | ")
+        : "";
+
+      if (data.changed === false) {
+        toast.message("AI reviewed the document but found only minimal edits.", {
+          description: summary,
+          duration: 4000,
+        });
+      } else {
+        toast.success("AI optimization applied", {
+          description: detail ? `${summary} · ${detail}` : summary,
+          duration: 4500,
+        });
+      }
+      setIsAiDialogOpen(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "AI review failed.";
+      setAiDialogError(message);
+      setAiDialogMessage("Execution stopped due to an error.");
+      toast.error(message);
+    } finally {
+      setIsAiReviewing(false);
+    }
+  }
+
   async function onNewDoc() {
     didUserEditRef.current = true;
     const result = history.createNew(markdownText);
@@ -559,6 +695,7 @@ export function MdDashboard() {
   const filteredDocs = displayFilteredDocs;
   const canExport = markdownText.trim().length > 0;
   const isExporting = exportingAction !== null;
+  const isBusy = isExporting || isAiReviewing;
 
   const sidebarContent = (rightSlot?: React.ReactNode) => (
     <>
@@ -757,7 +894,7 @@ export function MdDashboard() {
 
               <Button
                 variant="secondary"
-                disabled={isExporting || !canExport}
+                disabled={isBusy || !canExport}
                 onClick={onDownload}
                 className="hidden sm:inline-flex"
               >
@@ -771,7 +908,7 @@ export function MdDashboard() {
               <Button
                 variant="secondary"
                 size="icon"
-                disabled={isExporting || !canExport}
+                disabled={isBusy || !canExport}
                 onClick={onDownload}
                 className="sm:hidden"
                 aria-label="Download PDF"
@@ -785,7 +922,35 @@ export function MdDashboard() {
 
               <Button
                 variant="outline"
-                disabled={isExporting || !canExport}
+                disabled={isBusy || !canExport}
+                onClick={onAiReview}
+                className="hidden sm:inline-flex"
+              >
+                {isAiReviewing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <WandSparkles className="size-4" />
+                )}
+                AI Review
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={isBusy || !canExport}
+                onClick={onAiReview}
+                className="sm:hidden"
+                aria-label="AI Review"
+              >
+                {isAiReviewing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <WandSparkles className="size-4" />
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                disabled={isBusy || !canExport}
                 onClick={onPrint}
                 className="hidden sm:inline-flex"
               >
@@ -799,7 +964,7 @@ export function MdDashboard() {
               <Button
                 variant="outline"
                 size="icon"
-                disabled={isExporting || !canExport}
+                disabled={isBusy || !canExport}
                 onClick={onPrint}
                 className="sm:hidden"
                 aria-label="Print"
@@ -911,7 +1076,86 @@ export function MdDashboard() {
             </SidebarShell>
           </div>
         )}
+
+        {isAiDialogOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4">
+            <Card className="w-full max-w-md border shadow-xl">
+              <div className="space-y-4 p-5">
+                <div className="text-sm font-semibold">Improving Your Document</div>
+                <div className="text-xs text-muted-foreground">
+                  Please hang tight while we polish your writing. This window will close automatically when everything is ready.
+                </div>
+
+                <div className="space-y-2 rounded-md border p-3">
+                  <AgentRow
+                    title="Review Pass"
+                    active={aiActiveAgent === "reviewer" && !aiDialogError}
+                    done={aiActiveAgent === "editor" && !aiDialogError}
+                  />
+                  <AgentRow
+                    title="Polish Pass"
+                    active={aiActiveAgent === "editor" && !aiDialogError}
+                    done={Boolean(aiDialogError) ? false : aiActiveAgent === "editor" && !isAiReviewing}
+                  />
+                </div>
+
+                <div className="min-h-6 text-xs text-muted-foreground">
+                  {aiDialogMessage}
+                </div>
+
+                {aiDialogError && (
+                  <div className="space-y-3">
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                      {aiDialogError}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={() => setIsAiDialogOpen(false)}>
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function AgentRow({
+  title,
+  active,
+  done,
+}: {
+  title: string;
+  active: boolean;
+  done: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
+      <span className="font-medium">{title}</span>
+      {done ? (
+        <span className="text-emerald-600">Done</span>
+      ) : active ? (
+        <span className="inline-flex items-center gap-1 text-primary">
+          Thinking
+          <ThinkingDots />
+        </span>
+      ) : (
+        <span className="text-muted-foreground">Waiting</span>
+      )}
+    </div>
+  );
+}
+
+function ThinkingDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:160ms]" />
+      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:320ms]" />
+    </span>
   );
 }
