@@ -69,13 +69,12 @@ function saveActiveInList(
 export function useMdHistory(initialDocs: MdHistoryDoc[]) {
   const safeInitialDocs = React.useMemo(() => {
     if (initialDocs.length > 0) return initialDocs;
-    const now = Date.now();
     return [
       {
         id: "doc-initial",
-        mdFileName: makeMdFileName("untitled", now),
+        mdFileName: "untitled.md",
         markdown: "",
-        updatedAt: now,
+        updatedAt: 0,
       },
     ] satisfies MdHistoryDoc[];
   }, [initialDocs]);

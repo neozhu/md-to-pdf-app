@@ -236,32 +236,6 @@ export function MdWorkbench() {
     URL.revokeObjectURL(url);
   }
 
-  function printBlob(blob: Blob) {
-    const url = URL.createObjectURL(blob);
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    iframe.src = url;
-
-    iframe.onload = () => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } finally {
-        setTimeout(() => {
-          URL.revokeObjectURL(url);
-          iframe.remove();
-        }, 500);
-      }
-    };
-
-    document.body.appendChild(iframe);
-  }
-
   async function onDownload() {
     
     setError(null);

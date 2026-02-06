@@ -312,32 +312,6 @@ export function MdDashboard() {
     URL.revokeObjectURL(url);
   }
 
-  function printBlob(blob: Blob) {
-    const url = URL.createObjectURL(blob);
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    iframe.src = url;
-
-    iframe.onload = () => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } finally {
-        setTimeout(() => {
-          URL.revokeObjectURL(url);
-          iframe.remove();
-        }, 500);
-      }
-    };
-
-    document.body.appendChild(iframe);
-  }
-
   async function onDownload() {
     setExportingAction("download");
     try {
@@ -607,8 +581,11 @@ export function MdDashboard() {
             </Button>
             
           </div>
-          <div className="text-xs text-muted-foreground">
-            {filteredDocs.length}/{displayDocs.length}
+          <div className="flex items-center gap-2">
+            {rightSlot}
+            <div className="text-xs text-muted-foreground">
+              {filteredDocs.length}/{displayDocs.length}
+            </div>
           </div>
         </div>
         <div className="mt-2">

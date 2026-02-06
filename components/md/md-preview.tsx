@@ -1,8 +1,13 @@
 import ReactMarkdown from "react-markdown";
+import type { ComponentPropsWithoutRef } from "react";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
+
+type CodeProps = ComponentPropsWithoutRef<"code"> & {
+  className?: string;
+};
 
 export function MdPreview({
   markdown,
@@ -71,7 +76,7 @@ export function MdPreview({
               {...props}
             />
           ),
-          code: ({ className, children, ...props }: any) => {
+          code: ({ className, children, ...props }: CodeProps) => {
             const inline = !className;
             if (inline) {
               return (

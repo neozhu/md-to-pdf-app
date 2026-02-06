@@ -92,7 +92,7 @@ export async function POST(req: Request) {
         md_file_name: parsed.doc.mdFileName,
         markdown: parsed.doc.markdown,
         updated_at_ms: parsed.doc.updatedAt,
-      } as any)
+      })
       .select("id, md_file_name, markdown, updated_at_ms")
       .single();
 
@@ -107,4 +107,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
