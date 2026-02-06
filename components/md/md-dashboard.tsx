@@ -344,6 +344,10 @@ export function MdDashboard() {
     try {
       const blob = await requestPdf("attachment");
       downloadBlob(blob);
+      // Show success toast after download starts
+            toast.success("PDF downloaded!", {
+              duration: 2500,
+            });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Download failed.");
     } finally {
