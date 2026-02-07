@@ -432,6 +432,7 @@ export function MdWorkbench() {
                       <WorkbenchHeader title="Editor" />
                       <div className="min-h-0 flex-1">
                         <MdEditor
+                          key={`editor-${history.activeDocId}`}
                           value={markdownText}
                           onChange={onEditorChange}
                         />
@@ -481,7 +482,11 @@ export function MdWorkbench() {
             <div className="flex h-full flex-col">
               <WorkbenchHeader title="Editor" />
               <div className="min-h-0 flex-1">
-                <MdEditor value={markdownText} onChange={onEditorChange} />
+                <MdEditor
+                  key={`editor-${history.activeDocId}`}
+                  value={markdownText}
+                  onChange={onEditorChange}
+                />
               </div>
             </div>
           ) : (

@@ -108,12 +108,11 @@ export function MdHistory({
                 <button
                   key={doc.id}
                   type="button"
-                  onMouseDown={(e) => {
-                    if (e.button !== 0) return;
+                  onPointerDown={(e) => {
+                    if (e.pointerType === "mouse" && e.button !== 0) return;
                     e.preventDefault();
                     selectDoc();
                   }}
-                  onClick={selectDoc}
                   aria-current={isActive ? "true" : undefined}
                   style={{
                     animation: `fadeInUp 0.3s ease-out ${index * 0.05}s both`,
@@ -145,7 +144,7 @@ export function MdHistory({
                         variant="ghost"
                         className="h-8 w-8 opacity-70 hover:opacity-100"
                         aria-label={`Delete ${doc.mdFileName}`}
-                        onMouseDown={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                         }}

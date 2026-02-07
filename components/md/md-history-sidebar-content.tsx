@@ -126,12 +126,11 @@ export function MdHistorySidebarContent({
                   key={doc.id}
                   role="button"
                   tabIndex={0}
-                  onMouseDown={(e) => {
-                    if (e.button !== 0) return;
+                  onPointerDown={(e) => {
+                    if (e.pointerType === "mouse" && e.button !== 0) return;
                     e.preventDefault();
                     selectDoc();
                   }}
-                  onClick={selectDoc}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
@@ -168,7 +167,7 @@ export function MdHistorySidebarContent({
                       variant="ghost"
                       className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
                       aria-label={`Delete ${doc.mdFileName}`}
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                       }}

@@ -102,31 +102,54 @@ export async function printMarkdownLocally(markdown: string, title: string) {
     iframe.style.height = "0";
     iframe.style.border = "0";
     iframe.setAttribute("aria-hidden", "true");
-    iframe.srcdoc = docHtml;
+    iframe.srcdoc = "about:blank";
 
+    let watchdogTimer: number | null = null;
+    let fallbackTimer: number | null = null;
     const cleanup = () => {
+      if (watchdogTimer !== null) {
+        window.clearTimeout(watchdogTimer);
+      }
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+      }
       iframe.remove();
     };
 
-    iframe.onload = () => {
+    let done = false;
+    const finish = (err?: unknown) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (err) {
+        reject(err instanceof Error ? err : new Error("Print failed."));
+      } else {
+        resolve();
+      }
+    };
+
+    watchdogTimer = window.setTimeout(() => {
+      finish(new Error("Print timed out. Please try again."));
+    }, 10000);
+
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      finish(new Error("Unable to access print document."));
+      return;
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(docHtml);
+    iframeDoc.close();
+
+    const triggerPrint = () => {
       const printWindow = iframe.contentWindow;
       if (!printWindow) {
-        cleanup();
-        reject(new Error("Unable to access print window."));
+        finish(new Error("Unable to access print window."));
         return;
       }
-
-      let done = false;
-      const finish = (err?: unknown) => {
-        if (done) return;
-        done = true;
-        cleanup();
-        if (err) {
-          reject(err instanceof Error ? err : new Error("Print failed."));
-        } else {
-          resolve();
-        }
-      };
 
       printWindow.addEventListener("afterprint", () => finish(), {
         once: true,
@@ -135,17 +158,13 @@ export async function printMarkdownLocally(markdown: string, title: string) {
       try {
         printWindow.focus();
         printWindow.print();
-        window.setTimeout(() => finish(), 1200);
+        // Fallback for environments where afterprint is unreliable.
+        fallbackTimer = window.setTimeout(() => finish(), 1200);
       } catch (error) {
         finish(error);
       }
     };
 
-    iframe.onerror = () => {
-      cleanup();
-      reject(new Error("Failed to load print document."));
-    };
-
-    document.body.appendChild(iframe);
+    window.setTimeout(triggerPrint, 80);
   });
 }
