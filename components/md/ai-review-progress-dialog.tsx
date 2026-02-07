@@ -144,7 +144,7 @@ function ThinkingSignal() {
 
         .ai-thinking-bar {
           width: 0.18rem;
-          height: 100%;
+          height: 80%;
           border-radius: 9999px;
           background: currentColor;
           opacity: 0.8;
