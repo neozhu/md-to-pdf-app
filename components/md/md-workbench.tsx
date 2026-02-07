@@ -345,7 +345,7 @@ export function MdWorkbench() {
                 MD → PDF
               </div>
               <div className="text-sm text-muted-foreground">
-                Write, preview & export to PDF
+                Draft in Markdown. Polish with AI. Export as pro PDF.
               </div>
             </div>
           </div>
@@ -530,7 +530,7 @@ export function MdWorkbench() {
 
         <footer className="flex flex-col gap-2 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
           <div>
-            From Markdown to PDF, beautifully simple. •{" "}
+            Turn raw notes into publication-ready PDFs with AI Review. •{" "}
             <a
               href="https://github.com/neozhu/md-to-pdf-app"
               target="_blank"
@@ -539,7 +539,7 @@ export function MdWorkbench() {
             >
               Open source on GitHub
             </a>{" "}
-            — feedback welcome!
+            — help shape what ships next.
           </div>
           <div className="text-foreground/70">
             Tip: add frontmatter, tables, and code blocks.

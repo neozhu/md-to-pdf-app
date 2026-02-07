@@ -89,7 +89,7 @@ export function MdDashboardHeader({
             <div className="flex flex-col gap-0.5 leading-tight">
               <div className="text-[11px] font-semibold tracking-tight">MD → PDF</div>
               <div className="text-[10px] text-muted-foreground">
-                Write, preview & export to PDF
+                Draft in Markdown. Polish with AI. Export as pro PDF.
               </div>
             </div>
           </div>
@@ -226,4 +226,3 @@ export function MdDashboardHeader({
     </header>
   );
 }
-

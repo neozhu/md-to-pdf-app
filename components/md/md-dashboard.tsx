@@ -665,7 +665,7 @@ export function MdDashboard() {
             </Card>
 
             <footer className="text-[11px] text-muted-foreground">
-              From Markdown to PDF, beautifully simple. •{" "}
+              Turn raw notes into publication-ready PDFs with AI Review. •{" "}
               <a
                 href="https://github.com/neozhu/md-to-pdf-app"
                 target="_blank"
@@ -674,7 +674,7 @@ export function MdDashboard() {
               >
                 Open source on GitHub
               </a>{" "}
-              — feedback welcome!
+              — help shape what ships next.
             </footer>
           </main>
         </div>
