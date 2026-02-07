@@ -1,27 +1,13 @@
 "use client";
 
 import * as React from "react";
-import {
-  Download,
-  Loader2,
-  Menu,
-  Plus,
-  Printer,
-  RefreshCw,
-  WandSparkles,
-  X,
-  Trash2,
-  Github,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { marked } from "marked";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
-import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   createMdHistoryDoc,
@@ -29,41 +15,65 @@ import {
   listMdHistoryDocs,
   upsertMdHistoryDoc,
 } from "@/lib/md-history-api";
+import {
+  AiReviewProgressDialog,
+  type AiAgent,
+} from "./ai-review-progress-dialog";
+import { MdDashboardHeader } from "./md-dashboard-header";
+import { MdHistorySidebarContent } from "./md-history-sidebar-content";
 import { MdEditor } from "./md-editor";
 import { MdPreview } from "./md-preview";
 import {
-  getMarkdownSummary,
   mdFileNameToPdfFileName,
   useMdHistory,
 } from "./use-md-history";
 
 type ViewMode = "split" | "editor" | "preview";
-type AiAgent = "reviewer" | "editor" | null;
+type AiToolInsights = {
+  structureRecoveryDetected?: boolean;
+  structureCues?: string[];
+  rawBlockCount?: number;
+  headingCandidateCount?: number;
+  listCandidateCount?: number;
+  codeCandidateCount?: number;
+  recoveredCodeBlockCount?: number;
+  factualRiskLevel?: "low" | "medium" | "high";
+  factualWarnings?: string[];
+};
 type AiReviewResponse = {
   review?: string;
   keyImprovements?: string[];
   polishedMarkdown?: string;
   changed?: boolean;
+  toolInsights?: AiToolInsights;
   error?: string;
 };
 
-function formatRelativeTime(updatedAtMs: number) {
-  const now = Date.now();
-  const diff = now - updatedAtMs;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  
-  // Show date (MM/DD) for older than 7 days
-  return new Intl.DateTimeFormat('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-  }).format(updatedAtMs);
+function formatToolInsights(insights?: AiToolInsights) {
+  if (!insights) return "";
+  const parts: string[] = [];
+  if (insights.structureRecoveryDetected) {
+    parts.push("structure rebuild enabled");
+  }
+  if (typeof insights.rawBlockCount === "number") {
+    parts.push(
+      `blocks ${insights.rawBlockCount} (h${insights.headingCandidateCount ?? 0}/l${insights.listCandidateCount ?? 0}/c${insights.codeCandidateCount ?? 0})`,
+    );
+  }
+  if (
+    typeof insights.recoveredCodeBlockCount === "number" &&
+    insights.recoveredCodeBlockCount > 0
+  ) {
+    parts.push(`code blocks recovered ${insights.recoveredCodeBlockCount}`);
+  }
+  if (insights.factualRiskLevel) {
+    parts.push(`factual risk ${insights.factualRiskLevel}`);
+  }
+  const factualWarnings = insights.factualWarnings ?? [];
+  if (factualWarnings.length > 0) {
+    parts.push(factualWarnings[0]);
+  }
+  return parts.join(" · ");
 }
 
 function WorkbenchHeader({ title }: { title: string }) {
@@ -583,10 +593,11 @@ export function MdDashboard() {
       const detail = Array.isArray(data.keyImprovements)
         ? data.keyImprovements.slice(0, 3).join(" | ")
         : "";
+      const insightsSummary = formatToolInsights(data.toolInsights);
 
       if (data.changed === false) {
         toast.message("AI reviewed the document but found only minimal edits.", {
-          description: summary,
+          description: insightsSummary ? `${summary} · ${insightsSummary}` : summary,
           duration: 4000,
         });
       } else {
@@ -594,6 +605,12 @@ export function MdDashboard() {
           description: detail ? `${summary} · ${detail}` : summary,
           duration: 4500,
         });
+        if (insightsSummary) {
+          toast.message("AI tool insights", {
+            description: insightsSummary,
+            duration: 4500,
+          });
+        }
       }
       setIsAiDialogOpen(false);
     } catch (e) {
@@ -697,307 +714,44 @@ export function MdDashboard() {
   const isExporting = exportingAction !== null;
   const isBusy = isExporting || isAiReviewing;
 
-  const sidebarContent = (rightSlot?: React.ReactNode) => (
-    <>
-      <div className="border-b px-3 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              className="h-8 w-8"
-              onClick={onRefresh}
-              disabled={isHistoryHydrating}
-              aria-label="Refresh history"
-            >
-              <RefreshCw className={cn("size-4", isHistoryHydrating && "animate-spin")} />
-            </Button>
-            <Button variant="secondary" size="sm" onClick={onNewDoc}>
-              <Plus className="size-4" />
-              New
-            </Button>
-            
-          </div>
-          <div className="flex items-center gap-2">
-            {rightSlot}
-            <div className="text-xs text-muted-foreground">
-              {filteredDocs.length}/{displayDocs.length}
-            </div>
-          </div>
-        </div>
-        <div className="mt-2">
-          <Input
-            value={history.query}
-            onChange={(e) => history.setQuery(e.target.value)}
-            placeholder="Search docs…"
-            aria-label="Search documents"
-          />
-        </div>
-      </div>
-
-      <nav className="min-h-0 flex-1 overflow-auto p-2">
-        <div className="px-2 pb-2 text-[11px] font-medium text-muted-foreground">
-          History
-        </div>
-
-        {isHistoryHydrating ? (
-          <div className="flex flex-col gap-1">
-            {[...Array(5)].map((_, i) => (
-              <div
-                key={i}
-                className="rounded-md border border-border/40 px-2.5 py-2"
-              >
-                <Skeleton className="h-3 w-3/4 mb-1.5" />
-                <Skeleton className="h-2.5 w-full" />
-              </div>
-            ))}
-          </div>
-        ) : filteredDocs.length === 0 ? (
-          <div className="px-2 py-10 text-center text-sm text-muted-foreground">
-            No matching documents.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {filteredDocs.map((doc, index) => {
-              const isActive = doc.id === history.activeDocId;
-              const summary = getMarkdownSummary(doc.markdown, 64);
-              return (
-                <div
-                  key={doc.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelectDoc(doc.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelectDoc(doc.id);
-                    }
-                  }}
-                  aria-current={isActive ? "true" : undefined}
-                  style={{
-                    animation: `fadeInUp 0.3s ease-out ${index * 0.05}s both`,
-                  }}
-                  className={cn(
-                    "group relative w-full rounded-md border px-2.5 py-2 text-left transition-colors",
-                    isActive
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-border/40 hover:border-border hover:bg-accent/35",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className="truncate text-xs font-medium">
-                          {doc.mdFileName}
-                        </div>
-                        <div className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
-                          {formatRelativeTime(doc.updatedAt)}
-                        </div>
-                      </div>
-                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        {summary || "—"}
-                      </div>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label={`Delete ${doc.mdFileName}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDeleteDoc(doc.id);
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-
-                  {isActive && (
-                    <div className="absolute left-0 top-2 bottom-2 rounded-r bg-primary" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </nav>
-    </>
+  const renderSidebarContent = (rightSlot?: React.ReactNode) => (
+    <MdHistorySidebarContent
+      rightSlot={rightSlot}
+      isHistoryHydrating={isHistoryHydrating}
+      filteredDocs={filteredDocs}
+      displayDocsCount={displayDocs.length}
+      query={history.query}
+      onQueryChange={history.setQuery}
+      activeDocId={history.activeDocId}
+      onRefresh={onRefresh}
+      onNewDoc={onNewDoc}
+      onSelectDoc={onSelectDoc}
+      onDeleteDoc={onDeleteDoc}
+    />
   );
 
   return (
     <div className="min-h-dvh text-xs">
       <div className="relative flex min-h-dvh w-full flex-col">
-        <header className="sticky top-0 z-20 border-b bg-background/70 py-2 backdrop-blur">
-          <div className="flex min-h-[40px] flex-col gap-2 px-4 md:flex-row md:items-center md:justify-between md:px-6">
-            <div className="flex min-w-0 items-center gap-2">
-              {!canSplit && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Open menu"
-                  onClick={() => setIsSidebarOpen(true)}
-                >
-                  <Menu className="size-4" />
-                </Button>
-              )}
-
-              <div className="flex items-center gap-2">
-                <div className="flex size-7 items-center justify-center rounded-md bg-primary overflow-hidden">
-                  <svg width="28" height="28" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="64" height="64" fill="#2563eb"/>
-                    <path d="M16 20C16 18.8954 16.8954 18 18 18H46C47.1046 18 48 18.8954 48 20V44C48 45.1046 47.1046 46 46 46H18C16.8954 46 16 45.1046 16 44V20Z" fill="white"/>
-                    <path d="M22 26L22 38L26 38L26 32L28 35L30 32L30 38L34 38L34 26L30 26L28 30.5L26 26L22 26Z" fill="#2563eb"/>
-                    <path d="M36 26L36 38L40 38L42 35L42 38L46 38L46 26L42 26L40 29L40 26L36 26Z" fill="#2563eb" fillOpacity="0.7"/>
-                  </svg>
-                </div>
-                <div className="flex flex-col gap-0.5 leading-tight">
-                  <div className="text-[11px] font-semibold tracking-tight">
-                    MD → PDF
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    Write, preview & export to PDF
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Input
-                value={fileName}
-                onChange={(e) => setFileName(e.target.value)}
-                className="w-[180px] sm:w-[200px] md:w-[220px]"
-                placeholder="export.pdf"
-                aria-label="PDF file name"
-              />
-
-              {!canSplit && (
-                <div className="flex items-center rounded-lg border bg-card p-1">
-                  <Button
-                    size="sm"
-                    variant={viewMode === "editor" ? "secondary" : "ghost"}
-                    className="rounded-md"
-                    onClick={() => setViewMode("editor")}
-                  >
-                    Editor
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={viewMode === "preview" ? "secondary" : "ghost"}
-                    className="rounded-md"
-                    onClick={() => setViewMode("preview")}
-                  >
-                    Preview
-                  </Button>
-                </div>
-              )}
-
-              <Button
-                variant="secondary"
-                disabled={isBusy || !canExport}
-                onClick={onDownload}
-                className="hidden sm:inline-flex"
-              >
-                {exportingAction === "download" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Download className="size-4" />
-                )}
-                Download PDF
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                disabled={isBusy || !canExport}
-                onClick={onDownload}
-                className="sm:hidden"
-                aria-label="Download PDF"
-              >
-                {exportingAction === "download" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Download className="size-4" />
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={isBusy || !canExport}
-                onClick={onAiReview}
-                className="hidden sm:inline-flex"
-              >
-                {isAiReviewing ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <WandSparkles className="size-4" />
-                )}
-                AI Review
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                disabled={isBusy || !canExport}
-                onClick={onAiReview}
-                className="sm:hidden"
-                aria-label="AI Review"
-              >
-                {isAiReviewing ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <WandSparkles className="size-4" />
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={isBusy || !canExport}
-                onClick={onPrint}
-                className="hidden sm:inline-flex"
-              >
-                {exportingAction === "print" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Printer className="size-4" />
-                )}
-                Print
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                disabled={isBusy || !canExport}
-                onClick={onPrint}
-                className="sm:hidden"
-                aria-label="Print"
-              >
-                {exportingAction === "print" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Printer className="size-4" />
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="icon"
-              >
-                <a
-                  href="https://github.com/neozhu/md-to-pdf-app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="View on GitHub"
-                >
-                  <Github className="size-4" />
-                </a>
-              </Button>
-
-              <ModeToggle />
-            </div>
-          </div>
-        </header>
+        <MdDashboardHeader
+          canSplit={canSplit}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          onOpenSidebar={() => setIsSidebarOpen(true)}
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          isBusy={isBusy}
+          canExport={canExport}
+          exportingAction={exportingAction}
+          isAiReviewing={isAiReviewing}
+          onDownload={onDownload}
+          onAiReview={onAiReview}
+          onPrint={onPrint}
+        />
 
         <div className="relative flex min-h-0 flex-1 px-4 pt-4 md:px-4 lg:pl-[280px]">
           <SidebarShell className="fixed left-0 top-14 hidden h-[calc(100dvh-3.5rem)] border-r lg:flex">
-            {sidebarContent()}
+            {renderSidebarContent()}
           </SidebarShell>
 
           <main className="flex min-w-0 flex-1 flex-col gap-4">
@@ -1063,7 +817,7 @@ export function MdDashboard() {
               onClick={() => setIsSidebarOpen(false)}
             />
             <SidebarShell className="absolute left-0 top-0 h-full w-[min(360px,88vw)] border-r shadow-xl">
-              {sidebarContent(
+              {renderSidebarContent(
                 <Button
                   size="icon"
                   variant="ghost"
@@ -1077,85 +831,15 @@ export function MdDashboard() {
           </div>
         )}
 
-        {isAiDialogOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4">
-            <Card className="w-full max-w-md border shadow-xl">
-              <div className="space-y-4 p-5">
-                <div className="text-sm font-semibold">Improving Your Document</div>
-                <div className="text-xs text-muted-foreground">
-                  Please hang tight while we polish your writing. This window will close automatically when everything is ready.
-                </div>
-
-                <div className="space-y-2 rounded-md border p-3">
-                  <AgentRow
-                    title="Review Pass"
-                    active={aiActiveAgent === "reviewer" && !aiDialogError}
-                    done={aiActiveAgent === "editor" && !aiDialogError}
-                  />
-                  <AgentRow
-                    title="Polish Pass"
-                    active={aiActiveAgent === "editor" && !aiDialogError}
-                    done={Boolean(aiDialogError) ? false : aiActiveAgent === "editor" && !isAiReviewing}
-                  />
-                </div>
-
-                <div className="min-h-6 text-xs text-muted-foreground">
-                  {aiDialogMessage}
-                </div>
-
-                {aiDialogError && (
-                  <div className="space-y-3">
-                    <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                      {aiDialogError}
-                    </div>
-                    <div className="flex justify-end">
-                      <Button onClick={() => setIsAiDialogOpen(false)}>
-                        Close
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-        )}
+        <AiReviewProgressDialog
+          open={isAiDialogOpen}
+          activeAgent={aiActiveAgent}
+          dialogError={aiDialogError}
+          dialogMessage={aiDialogMessage}
+          isAiReviewing={isAiReviewing}
+          onClose={() => setIsAiDialogOpen(false)}
+        />
       </div>
     </div>
-  );
-}
-
-function AgentRow({
-  title,
-  active,
-  done,
-}: {
-  title: string;
-  active: boolean;
-  done: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
-      <span className="font-medium">{title}</span>
-      {done ? (
-        <span className="text-emerald-600">Done</span>
-      ) : active ? (
-        <span className="inline-flex items-center gap-1 text-primary">
-          Thinking
-          <ThinkingDots />
-        </span>
-      ) : (
-        <span className="text-muted-foreground">Waiting</span>
-      )}
-    </div>
-  );
-}
-
-function ThinkingDots() {
-  return (
-    <span className="inline-flex items-center gap-0.5">
-      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:160ms]" />
-      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:320ms]" />
-    </span>
   );
 }
