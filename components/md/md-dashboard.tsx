@@ -3,7 +3,6 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { marked } from "marked";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import {
   listMdHistoryDocs,
   upsertMdHistoryDoc,
 } from "@/lib/md-history-api";
+import { printMarkdownLocally } from "@/lib/markdown/print";
 import {
   AiReviewProgressDialog,
   type AiAgent,
@@ -297,14 +297,14 @@ export function MdDashboard() {
     };
   }, [isSidebarOpen]);
 
-  async function requestPdf(disposition: "inline" | "attachment") {
+  async function requestPdf() {
     const res = await fetch("/api/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         markdown: markdownText,
         fileName,
-        disposition,
+        disposition: "attachment",
       }),
     });
 
@@ -339,7 +339,7 @@ export function MdDashboard() {
   async function onDownload() {
     setExportingAction("download");
     try {
-      const blob = await requestPdf("attachment");
+      const blob = await requestPdf();
       downloadBlob(blob);
       // Show success toast after download starts
             toast.success("PDF downloaded!", {
@@ -355,138 +355,7 @@ export function MdDashboard() {
   async function onPrint() {
     setExportingAction("print");
     try {
-      // Create a hidden iframe for printing
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc) {
-        throw new Error("Cannot access iframe document");
-      }
-
-      // Write print-ready HTML with styles (matching PDF generation)
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${fileName}</title>
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css">
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css">
-            <link rel="preconnect" href="https://fonts.googleapis.com">
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
-            <style>
-              @page {
-                size: A4;
-                margin: 1.5cm 1cm;
-              }
-              @media print {
-                @page {
-                  margin: 1.5cm 1cm;
-                }
-                html, body {
-                  margin: 0;
-                  padding: 0;
-                }
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
-              }
-              .markdown-body {
-                box-sizing: border-box;
-                width: 100%;
-                padding: 0.5cm;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
-                font-size: 14px;
-              }
-              .markdown-body * {
-                font-family: inherit;
-              }
-              .markdown-body code,
-              .markdown-body pre {
-                font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace, "Noto Sans SC";
-              }
-              .markdown-body h1,
-              .markdown-body h2,
-              .markdown-body h3,
-              .markdown-body h4,
-              .markdown-body h5,
-              .markdown-body h6 {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Serif SC", "Microsoft YaHei", sans-serif;
-                page-break-after: avoid;
-              }
-              .markdown-body pre {
-                page-break-inside: avoid;
-              }
-              .markdown-body table {
-                page-break-inside: avoid;
-              }
-              .markdown-body table th,
-              .markdown-body table td {
-                border-color: #d0d7de !important;
-              }
-              .markdown-body table tr {
-                border-top-color: #d0d7de !important;
-              }
-              @media print {
-                .markdown-body table {
-                  border-collapse: collapse !important;
-                }
-                .markdown-body table th,
-                .markdown-body table td {
-                  border: 1px solid #d0d7de !important;
-                }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="markdown-body" id="content"></div>
-          </body>
-        </html>
-      `);
-      iframeDoc.close();
-
-      // Convert markdown to HTML using marked
-      const contentDiv = iframeDoc.getElementById("content");
-      if (contentDiv) {
-        const html = await marked.parse(markdownText, {
-          gfm: true,
-          breaks: true,
-        });
-        contentDiv.innerHTML = html;
-      }
-
-      // Trigger print
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        } finally {
-          setTimeout(() => {
-            iframe.remove();
-          }, 500);
-        }
-      };
-
-      // If already loaded, print immediately
-      if (iframeDoc.readyState === "complete") {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-        setTimeout(() => {
-          iframe.remove();
-        }, 500);
-      }
+      await printMarkdownLocally(markdownText, fileName);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Print failed.");
     } finally {

@@ -103,11 +103,17 @@ export function MdHistory({
             {docs.map((doc, index) => {
               const isActive = doc.id === activeDocId;
               const summary = getMarkdownSummary(doc.markdown, 80);
+              const selectDoc = () => onSelect(doc.id);
               return (
                 <button
                   key={doc.id}
                   type="button"
-                  onClick={() => onSelect(doc.id)}
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    selectDoc();
+                  }}
+                  onClick={selectDoc}
                   aria-current={isActive ? "true" : undefined}
                   style={{
                     animation: `fadeInUp 0.3s ease-out ${index * 0.05}s both`,
@@ -139,6 +145,10 @@ export function MdHistory({
                         variant="ghost"
                         className="h-8 w-8 opacity-70 hover:opacity-100"
                         aria-label={`Delete ${doc.mdFileName}`}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();

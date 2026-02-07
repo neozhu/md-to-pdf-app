@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Download, History, Loader2, Printer } from "lucide-react";
-import { marked } from "marked";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
 
@@ -16,6 +15,7 @@ import {
   listMdHistoryDocs,
   upsertMdHistoryDoc,
 } from "@/lib/md-history-api";
+import { printMarkdownLocally } from "@/lib/markdown/print";
 import { HistoryCloseButton, MdHistory } from "./md-history";
 import { MdEditor } from "./md-editor";
 import { MdPreview } from "./md-preview";
@@ -199,14 +199,14 @@ export function MdWorkbench() {
     };
   }, [isHistoryOpen]);
 
-  async function requestPdf(disposition: "inline" | "attachment") {
+  async function requestPdf() {
     const res = await fetch("/api/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         markdown: markdownText,
         fileName,
-        disposition,
+        disposition: "attachment",
       }),
     });
 
@@ -241,7 +241,7 @@ export function MdWorkbench() {
     setError(null);
     setIsExporting(true);
     try {
-      const blob = await requestPdf("attachment");
+      const blob = await requestPdf();
       downloadBlob(blob);
       // Show success toast after download starts
       toast.success("PDF downloaded!", {
@@ -258,230 +258,7 @@ export function MdWorkbench() {
     setError(null);
     setIsExporting(true);
     try {
-      // Create a hidden iframe for printing
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc) {
-        throw new Error("Cannot access iframe document");
-      }
-
-      // Write print-ready HTML with inline styles (no CDN dependencies)
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${fileName}</title>
-            <style>
-              @page {
-                size: A4;
-                margin: 1.5cm 1cm;
-              }
-              @media print {
-                @page {
-                  margin: 1.5cm 1cm;
-                }
-                html, body {
-                  margin: 0;
-                  padding: 0;
-                }
-              }
-              * {
-                box-sizing: border-box;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-                font-size: 16px;
-                line-height: 1.6;
-                color: #24292f;
-                background: #ffffff;
-              }
-              .markdown-body {
-                width: 100%;
-                max-width: 100%;
-                padding: 0.5cm;
-              }
-              .markdown-body h1,
-              .markdown-body h2,
-              .markdown-body h3,
-              .markdown-body h4,
-              .markdown-body h5,
-              .markdown-body h6 {
-                margin-top: 24px;
-                margin-bottom: 16px;
-                font-weight: 600;
-                line-height: 1.25;
-                page-break-after: avoid;
-              }
-              .markdown-body h1 {
-                font-size: 2em;
-                border-bottom: 1px solid #d8dee4;
-                padding-bottom: 0.3em;
-              }
-              .markdown-body h2 {
-                font-size: 1.5em;
-                border-bottom: 1px solid #d8dee4;
-                padding-bottom: 0.3em;
-              }
-              .markdown-body h3 { font-size: 1.25em; }
-              .markdown-body h4 { font-size: 1em; }
-              .markdown-body h5 { font-size: 0.875em; }
-              .markdown-body h6 { font-size: 0.85em; color: #57606a; }
-              .markdown-body p {
-                margin-top: 0;
-                margin-bottom: 16px;
-              }
-              .markdown-body a {
-                color: #0969da;
-                text-decoration: none;
-              }
-              .markdown-body a:hover {
-                text-decoration: underline;
-              }
-              .markdown-body ul,
-              .markdown-body ol {
-                margin-top: 0;
-                margin-bottom: 16px;
-                padding-left: 2em;
-              }
-              .markdown-body li {
-                margin-top: 0.25em;
-              }
-              .markdown-body li + li {
-                margin-top: 0.25em;
-              }
-              .markdown-body code {
-                padding: 0.2em 0.4em;
-                margin: 0;
-                font-size: 85%;
-                background-color: rgba(175,184,193,0.2);
-                border-radius: 6px;
-                font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
-              }
-              .markdown-body pre {
-                padding: 16px;
-                overflow: auto;
-                font-size: 85%;
-                line-height: 1.45;
-                background-color: #f6f8fa;
-                border-radius: 6px;
-                margin-top: 0;
-                margin-bottom: 16px;
-                page-break-inside: avoid;
-              }
-              .markdown-body pre code {
-                display: block;
-                padding: 0;
-                margin: 0;
-                background: transparent;
-                border: 0;
-                font-size: 100%;
-                word-break: normal;
-                white-space: pre;
-                overflow-x: auto;
-              }
-              .markdown-body blockquote {
-                padding: 0 1em;
-                color: #57606a;
-                border-left: 0.25em solid #d0d7de;
-                margin: 0 0 16px 0;
-              }
-              .markdown-body table {
-                border-spacing: 0;
-                border-collapse: collapse;
-                display: block;
-                width: max-content;
-                max-width: 100%;
-                overflow: auto;
-                margin-top: 0;
-                margin-bottom: 16px;
-                page-break-inside: avoid;
-              }
-              .markdown-body table th,
-              .markdown-body table td {
-                padding: 6px 13px;
-                border: 1px solid #d0d7de;
-              }
-              .markdown-body table th {
-                font-weight: 600;
-                background-color: #f6f8fa;
-              }
-              .markdown-body table tr {
-                background-color: #ffffff;
-                border-top: 1px solid #d0d7de;
-              }
-              .markdown-body table tr:nth-child(2n) {
-                background-color: #f6f8fa;
-              }
-              .markdown-body hr {
-                height: 0.25em;
-                padding: 0;
-                margin: 24px 0;
-                background-color: #d0d7de;
-                border: 0;
-              }
-              .markdown-body img {
-                max-width: 100%;
-                box-sizing: content-box;
-              }
-              @media print {
-                .markdown-body {
-                  font-size: 12pt;
-                }
-                .markdown-body h1 { font-size: 24pt; }
-                .markdown-body h2 { font-size: 18pt; }
-                .markdown-body h3 { font-size: 14pt; }
-                .markdown-body h4 { font-size: 12pt; }
-                .markdown-body table {
-                  border-collapse: collapse !important;
-                }
-                .markdown-body table th,
-                .markdown-body table td {
-                  border: 1px solid #d0d7de !important;
-                }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="markdown-body" id="content"></div>
-          </body>
-        </html>
-      `);
-      iframeDoc.close();
-
-      // Convert markdown to HTML using marked
-      const contentDiv = iframeDoc.getElementById("content");
-      if (contentDiv) {
-        const html = await marked.parse(markdownText, {
-          gfm: true,
-          breaks: true,
-        });
-        contentDiv.innerHTML = html;
-      }
-
-      // Wait a moment for content to be fully rendered, then print
-      setTimeout(() => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        } finally {
-          setTimeout(() => {
-            iframe.remove();
-          }, 500);
-        }
-      }, 300);
+      await printMarkdownLocally(markdownText, fileName);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Print failed.");
     } finally {

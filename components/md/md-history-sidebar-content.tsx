@@ -120,16 +120,22 @@ export function MdHistorySidebarContent({
             {filteredDocs.map((doc, index) => {
               const isActive = doc.id === activeDocId;
               const summary = getMarkdownSummary(doc.markdown, 64);
+              const selectDoc = () => onSelectDoc(doc.id);
               return (
                 <div
                   key={doc.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => onSelectDoc(doc.id)}
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    selectDoc();
+                  }}
+                  onClick={selectDoc}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      onSelectDoc(doc.id);
+                      selectDoc();
                     }
                   }}
                   aria-current={isActive ? "true" : undefined}
@@ -162,6 +168,10 @@ export function MdHistorySidebarContent({
                       variant="ghost"
                       className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
                       aria-label={`Delete ${doc.mdFileName}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -184,4 +194,3 @@ export function MdHistorySidebarContent({
     </>
   );
 }
-

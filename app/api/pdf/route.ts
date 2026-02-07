@@ -1,61 +1,7 @@
 import { NextResponse } from "next/server";
-import sanitizeHtml from "sanitize-html";
-import { Marked } from "marked";
-import { markedHighlight } from "marked-highlight";
+import { renderSafeMarkdownToHtml } from "@/lib/markdown/render";
 
 export const runtime = "nodejs";
-
-const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: [
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "p",
-    "a",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "code",
-    "pre",
-    "em",
-    "strong",
-    "del",
-    "hr",
-    "br",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "img",
-    "span",
-    "input",
-  ],
-  allowedAttributes: {
-    a: ["href", "name", "target", "rel", "title"],
-    img: ["src", "alt", "title", "width", "height", "loading"],
-    code: ["class"],
-    span: ["class"],
-    th: ["align", "colspan", "rowspan"],
-    td: ["align", "colspan", "rowspan"],
-    input: ["type", "checked", "disabled"],
-  },
-  allowedClasses: {
-    code: [/^language-[a-z0-9-]+$/i, /^hljs(?:-[a-z0-9-]+)?$/i],
-    span: [/^hljs(?:-[a-z0-9-]+)?$/i],
-  },
-  allowedSchemes: ["http", "https", "mailto", "tel"],
-  allowedSchemesByTag: {
-    img: ["http", "https", "data"],
-  },
-  allowProtocolRelative: false,
-  disallowedTagsMode: "discard",
-};
 
 export async function POST(req: Request) {
   try {
@@ -74,35 +20,7 @@ export async function POST(req: Request) {
     const finalName = safeName.toLowerCase().endsWith(".pdf") ? safeName : `${safeName}.pdf`;
     const contentDisposition = disposition === "attachment" ? "attachment" : "inline";
 
-    // Use marked + marked-highlight to render HTML with syntax highlighting in one pass.
-    const hljs = (await import("highlight.js")).default;
-
-    const parser = new Marked(
-      markedHighlight({
-        langPrefix: "hljs language-",
-        emptyLangClass: "hljs",
-        highlight(code, lang) {
-          try {
-            if (lang && hljs.getLanguage(lang)) {
-              return hljs.highlight(code, { language: lang }).value;
-            }
-            return hljs.highlightAuto(code).value;
-          } catch (e) {
-            console.error("[api/pdf] Highlight error:", e);
-            return code;
-          }
-        },
-      }),
-    );
-    parser.setOptions({
-      gfm: true,
-      breaks: true,
-    });
-
-    const renderedHtml = await parser.parse(markdown);
-
-    // IMPORTANT: marked output is not sanitized by default.
-    const sanitizedHtml = sanitizeHtml(renderedHtml, SANITIZE_OPTIONS);
+    const sanitizedHtml = renderSafeMarkdownToHtml(markdown);
 
     const fullHtml = `
       <!DOCTYPE html>

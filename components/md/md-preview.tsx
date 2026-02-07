@@ -1,13 +1,9 @@
-import ReactMarkdown from "react-markdown";
-import type { ComponentPropsWithoutRef } from "react";
-import rehypeHighlight from "rehype-highlight";
-import remarkGfm from "remark-gfm";
+"use client";
 
+import * as React from "react";
+
+import { renderSafeMarkdownToHtml } from "@/lib/markdown/render";
 import { cn } from "@/lib/utils";
-
-type CodeProps = ComponentPropsWithoutRef<"code"> & {
-  className?: string;
-};
 
 export function MdPreview({
   markdown,
@@ -16,89 +12,140 @@ export function MdPreview({
   markdown: string;
   className?: string;
 }) {
+  const safeHtml = React.useMemo(
+    () => renderSafeMarkdownToHtml(markdown),
+    [markdown],
+  );
+
   return (
     <div className={cn("h-full overflow-auto p-5", className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
-        components={{
-          h1: (props) => (
-            <h1
-              className="mb-4 text-2xl font-semibold tracking-tight"
-              {...props}
-            />
-          ),
-          h2: (props) => (
-            <h2
-              className="mt-8 mb-3 text-xl font-semibold tracking-tight"
-              {...props}
-            />
-          ),
-          h3: (props) => (
-            <h3 className="mt-6 mb-2 text-lg font-semibold" {...props} />
-          ),
-          p: (props) => (
-            <p className="my-3 leading-7 text-foreground/90" {...props} />
-          ),
-          a: (props) => (
-            <a
-              className="font-medium underline underline-offset-4 hover:text-foreground"
-              {...props}
-            />
-          ),
-          ul: (props) => <ul className="my-3 ml-5 list-disc" {...props} />,
-          ol: (props) => <ol className="my-3 ml-5 list-decimal" {...props} />,
-          li: (props) => <li className="my-1" {...props} />,
-          hr: () => <hr className="my-6 border-border" />,
-          blockquote: (props) => (
-            <blockquote
-              className="my-4 border-l-2 border-border pl-4 text-muted-foreground"
-              {...props}
-            />
-          ),
-          table: (props) => (
-            <div className="my-4 overflow-x-auto">
-              <table className="w-full border-collapse text-sm" {...props} />
-            </div>
-          ),
-          th: (props) => (
-            <th
-              className="border border-border bg-muted px-3 py-2 text-left font-medium"
-              {...props}
-            />
-          ),
-          td: (props) => (
-            <td className="border border-border px-3 py-2" {...props} />
-          ),
-          pre: (props) => (
-            <pre
-              className="my-4 overflow-x-auto rounded-lg !bg-transparent border border-slate-200 dark:border-slate-700 text-xs leading-relaxed"
-              {...props}
-            />
-          ),
-          code: ({ className, children, ...props }: CodeProps) => {
-            const inline = !className;
-            if (inline) {
-              return (
-                <code
-                  className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 font-mono text-xs text-slate-900 dark:text-slate-100"
-                  {...props}
-                >
-                  {children}
-                </code>
-              );
-            }
+      <div
+        className="md-preview-rendered"
+        dangerouslySetInnerHTML={{ __html: safeHtml }}
+      />
+      <style jsx>{`
+        .md-preview-rendered :global(h1) {
+          margin-bottom: 1rem;
+          font-size: 1.5rem;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+        }
 
-            return (
-              <code className={cn("font-mono !bg-transparent", className)} {...props}>
-                {children}
-              </code>
-            );
-          },
-        }}
-      >
-        {markdown}
-      </ReactMarkdown>
+        .md-preview-rendered :global(h2) {
+          margin-top: 2rem;
+          margin-bottom: 0.75rem;
+          font-size: 1.25rem;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+        }
+
+        .md-preview-rendered :global(h3) {
+          margin-top: 1.5rem;
+          margin-bottom: 0.5rem;
+          font-size: 1.125rem;
+          font-weight: 600;
+        }
+
+        .md-preview-rendered :global(p) {
+          margin-top: 0.75rem;
+          margin-bottom: 0.75rem;
+          line-height: 1.75;
+          color: color-mix(in oklch, currentColor 90%, transparent);
+        }
+
+        .md-preview-rendered :global(a) {
+          font-weight: 500;
+          text-decoration: underline;
+          text-underline-offset: 4px;
+        }
+
+        .md-preview-rendered :global(a:hover) {
+          color: color-mix(in oklch, currentColor 82%, transparent);
+        }
+
+        .md-preview-rendered :global(ul) {
+          margin: 0.75rem 0 0.75rem 1.25rem;
+          list-style: disc;
+        }
+
+        .md-preview-rendered :global(ol) {
+          margin: 0.75rem 0 0.75rem 1.25rem;
+          list-style: decimal;
+        }
+
+        .md-preview-rendered :global(li) {
+          margin: 0.25rem 0;
+        }
+
+        .md-preview-rendered :global(hr) {
+          margin: 1.5rem 0;
+          border-color: var(--border);
+        }
+
+        .md-preview-rendered :global(blockquote) {
+          margin: 1rem 0;
+          border-left: 2px solid var(--border);
+          padding-left: 1rem;
+          color: var(--muted-foreground);
+        }
+
+        .md-preview-rendered :global(table) {
+          margin: 1rem 0;
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.875rem;
+        }
+
+        .md-preview-rendered :global(th) {
+          border: 1px solid var(--border);
+          background: var(--muted);
+          padding: 0.5rem 0.75rem;
+          text-align: left;
+          font-weight: 500;
+        }
+
+        .md-preview-rendered :global(td) {
+          border: 1px solid var(--border);
+          padding: 0.5rem 0.75rem;
+        }
+
+        .md-preview-rendered :global(pre) {
+          margin: 1rem 0;
+          overflow-x: auto;
+          border-radius: 0.5rem;
+          border: 1px solid
+            color-mix(in oklch, var(--border) 100%, transparent);
+          background: transparent;
+          font-size: 0.75rem;
+          line-height: 1.6;
+          padding: 0.75rem;
+        }
+
+        .md-preview-rendered :global(pre code) {
+          background: transparent;
+          border: 0;
+          padding: 0;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+            "Liberation Mono", "Courier New", monospace;
+        }
+
+        .md-preview-rendered :global(:not(pre) > code) {
+          border-radius: 0.25rem;
+          border: 1px solid
+            color-mix(in oklch, var(--border) 100%, transparent);
+          background: color-mix(in oklch, var(--muted) 100%, transparent);
+          padding: 0.125rem 0.375rem;
+          font-size: 0.75rem;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+            "Liberation Mono", "Courier New", monospace;
+        }
+
+        .md-preview-rendered :global(img) {
+          max-width: 100%;
+          height: auto;
+        }
+      `}</style>
     </div>
   );
 }
+
