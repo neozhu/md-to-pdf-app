@@ -1,6 +1,61 @@
 import { NextResponse } from "next/server";
+import sanitizeHtml from "sanitize-html";
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
 
 export const runtime = "nodejs";
+
+const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "a",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+    "em",
+    "strong",
+    "del",
+    "hr",
+    "br",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "img",
+    "span",
+    "input",
+  ],
+  allowedAttributes: {
+    a: ["href", "name", "target", "rel", "title"],
+    img: ["src", "alt", "title", "width", "height", "loading"],
+    code: ["class"],
+    span: ["class"],
+    th: ["align", "colspan", "rowspan"],
+    td: ["align", "colspan", "rowspan"],
+    input: ["type", "checked", "disabled"],
+  },
+  allowedClasses: {
+    code: [/^language-[a-z0-9-]+$/i, /^hljs(?:-[a-z0-9-]+)?$/i],
+    span: [/^hljs(?:-[a-z0-9-]+)?$/i],
+  },
+  allowedSchemes: ["http", "https", "mailto", "tel"],
+  allowedSchemesByTag: {
+    img: ["http", "https", "data"],
+  },
+  allowProtocolRelative: false,
+  disallowedTagsMode: "discard",
+};
 
 export async function POST(req: Request) {
   try {
@@ -19,38 +74,36 @@ export async function POST(req: Request) {
     const finalName = safeName.toLowerCase().endsWith(".pdf") ? safeName : `${safeName}.pdf`;
     const contentDisposition = disposition === "attachment" ? "attachment" : "inline";
 
-    // Use marked to convert markdown to HTML, then puppeteer for PDF
-    // This avoids md-to-pdf's highlight.js path resolution issues
-    const { marked } = await import("marked");
+    // Use marked + marked-highlight to render HTML with syntax highlighting in one pass.
     const hljs = (await import("highlight.js")).default;
-    
-    // Convert markdown to HTML
-    const htmlContent = await marked(markdown);
-    
-    // Apply syntax highlighting to code blocks
-    const highlightedHtml = htmlContent.replace(
-      /<pre><code(?: class="language-(\w+)")?>([\s\S]*?)<\/code><\/pre>/g,
-      (match, lang, code) => {
-        const decodedCode = code
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'");
-        
-        try {
-          const highlighted = lang && hljs.getLanguage(lang)
-            ? hljs.highlight(decodedCode, { language: lang }).value
-            : hljs.highlightAuto(decodedCode).value;
-          
-          return `<pre><code class="hljs${lang ? ` language-${lang}` : ''}">${highlighted}</code></pre>`;
-        } catch (e) {
-          console.error('Highlight error:', e);
-          return match;
-        }
-      }
+
+    const parser = new Marked(
+      markedHighlight({
+        langPrefix: "hljs language-",
+        emptyLangClass: "hljs",
+        highlight(code, lang) {
+          try {
+            if (lang && hljs.getLanguage(lang)) {
+              return hljs.highlight(code, { language: lang }).value;
+            }
+            return hljs.highlightAuto(code).value;
+          } catch (e) {
+            console.error("[api/pdf] Highlight error:", e);
+            return code;
+          }
+        },
+      }),
     );
-    
+    parser.setOptions({
+      gfm: true,
+      breaks: true,
+    });
+
+    const renderedHtml = await parser.parse(markdown);
+
+    // IMPORTANT: marked output is not sanitized by default.
+    const sanitizedHtml = sanitizeHtml(renderedHtml, SANITIZE_OPTIONS);
+
     const fullHtml = `
       <!DOCTYPE html>
       <html>
@@ -112,7 +165,7 @@ export async function POST(req: Request) {
         </head>
         <body>
           <div class="markdown-body">
-            ${highlightedHtml}
+            ${sanitizedHtml}
           </div>
         </body>
       </html>
