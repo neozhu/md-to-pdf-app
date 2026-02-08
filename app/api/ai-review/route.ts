@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { generateText, jsonSchema, stepCountIs, tool } from "ai";
+import { generateObject, generateText, jsonSchema, stepCountIs, tool } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 
 export const runtime = "nodejs";
 
 const MAX_MARKDOWN_LEN = 120_000;
+const DEFAULT_MAX_INPUT_TOKENS = 30_000;
 
 type ReviewerResult = {
   review: string;
@@ -118,6 +119,14 @@ type FactualGuardResult = {
   recommendation: string;
 };
 
+type FactualBaseline = {
+  normalizedOriginal: string;
+  originalTokenSet: Set<string>;
+  originalNumbers: string[];
+  originalUrls: string[];
+  originalVersions: string[];
+};
+
 function normalizeMarkdownForCompare(input: string) {
   return input.replace(/\s+/g, " ").trim();
 }
@@ -129,9 +138,7 @@ function tokenizeForSimilarity(input: string) {
     .filter((token) => token.length >= 3);
 }
 
-function wordJaccardSimilarity(a: string, b: string) {
-  const setA = new Set(tokenizeForSimilarity(a));
-  const setB = new Set(tokenizeForSimilarity(b));
+function wordJaccardSimilarityFromSets(setA: Set<string>, setB: Set<string>) {
   if (setA.size === 0 && setB.size === 0) return 1;
   const union = new Set([...setA, ...setB]);
   let intersectionCount = 0;
@@ -139,6 +146,28 @@ function wordJaccardSimilarity(a: string, b: string) {
     if (setB.has(token)) intersectionCount += 1;
   }
   return intersectionCount / Math.max(1, union.size);
+}
+
+function wordJaccardSimilarity(a: string, b: string) {
+  return wordJaccardSimilarityFromSets(
+    new Set(tokenizeForSimilarity(a)),
+    new Set(tokenizeForSimilarity(b)),
+  );
+}
+
+function estimateInputTokens(text: string) {
+  // Heuristic: UTF-8 bytes are a better cross-language proxy than character count.
+  const bytes = Buffer.byteLength(text, "utf8");
+  return Math.ceil(bytes / 3.6);
+}
+
+function resolveMaxInputTokens() {
+  const envValue = process.env.OPENAI_INPUT_TOKEN_LIMIT;
+  if (!envValue) return DEFAULT_MAX_INPUT_TOKENS;
+  const parsed = Number.parseInt(envValue, 10);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_INPUT_TOKENS;
 }
 
 function buildStructureSignals(input: string): StructureSignals {
@@ -258,7 +287,9 @@ function lineCodeScore(line: string) {
 
 function detectCodeLanguage(lines: string[]) {
   const joined = lines.join("\n");
-  if (/^\s*[{[]/.test(lines.find((line) => line.trim()) ?? "") && /"\s*:/.test(joined)) {
+  const firstNonEmptyLine = lines.find((line) => line.trim()) ?? "";
+  const looksLikeJsonStart = /^\s*[{[]/.test(firstNonEmptyLine);
+  if (looksLikeJsonStart && /"\s*:/.test(joined)) {
     return "json";
   }
   if (/^\s*(\$|npm|pnpm|yarn|bun|node|npx|git|curl)\b/im.test(joined)) {
@@ -466,37 +497,41 @@ function diffItems(source: string[], target: string[]) {
   return source.filter((item) => !targetSet.has(item.toLowerCase()));
 }
 
-function factualGuard(original: string, candidate: string): FactualGuardResult {
-  const similarity = wordJaccardSimilarity(original, candidate);
-  const normalizedOriginal = normalizeMarkdownForCompare(original);
+function buildFactualBaseline(original: string): FactualBaseline {
+  return {
+    normalizedOriginal: normalizeMarkdownForCompare(original),
+    originalTokenSet: new Set(tokenizeForSimilarity(original)),
+    originalNumbers: extractUniqueMatches(original, /\b\d+(?:[.,]\d+)?%?\b/g, 30),
+    originalUrls: extractUniqueMatches(original, /https?:\/\/[^\s)]+/g, 20),
+    originalVersions: extractUniqueMatches(
+      original,
+      /\bv?\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?\b/g,
+      20,
+    ),
+  };
+}
+
+function factualGuardWithBaseline(
+  baseline: FactualBaseline,
+  candidate: string,
+): FactualGuardResult {
+  const similarity = wordJaccardSimilarityFromSets(
+    baseline.originalTokenSet,
+    new Set(tokenizeForSimilarity(candidate)),
+  );
   const normalizedCandidate = normalizeMarkdownForCompare(candidate);
   const lengthDelta =
-    Math.abs(normalizedCandidate.length - normalizedOriginal.length) /
-    Math.max(1, normalizedOriginal.length);
+    Math.abs(normalizedCandidate.length - baseline.normalizedOriginal.length) /
+    Math.max(1, baseline.normalizedOriginal.length);
 
-  const originalNumbers = extractUniqueMatches(
-    original,
-    /\b\d+(?:[.,]\d+)?%?\b/g,
-    30,
-  );
   const candidateNumbers = extractUniqueMatches(
     candidate,
     /\b\d+(?:[.,]\d+)?%?\b/g,
     30,
   );
-  const originalUrls = extractUniqueMatches(
-    original,
-    /https?:\/\/[^\s)]+/g,
-    20,
-  );
   const candidateUrls = extractUniqueMatches(
     candidate,
     /https?:\/\/[^\s)]+/g,
-    20,
-  );
-  const originalVersions = extractUniqueMatches(
-    original,
-    /\bv?\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?\b/g,
     20,
   );
   const candidateVersions = extractUniqueMatches(
@@ -505,12 +540,12 @@ function factualGuard(original: string, candidate: string): FactualGuardResult {
     20,
   );
 
-  const missingNumbers = diffItems(originalNumbers, candidateNumbers);
-  const addedNumbers = diffItems(candidateNumbers, originalNumbers);
-  const missingUrls = diffItems(originalUrls, candidateUrls);
-  const addedUrls = diffItems(candidateUrls, originalUrls);
-  const missingVersions = diffItems(originalVersions, candidateVersions);
-  const addedVersions = diffItems(candidateVersions, originalVersions);
+  const missingNumbers = diffItems(baseline.originalNumbers, candidateNumbers);
+  const addedNumbers = diffItems(candidateNumbers, baseline.originalNumbers);
+  const missingUrls = diffItems(baseline.originalUrls, candidateUrls);
+  const addedUrls = diffItems(candidateUrls, baseline.originalUrls);
+  const missingVersions = diffItems(baseline.originalVersions, candidateVersions);
+  const addedVersions = diffItems(candidateVersions, baseline.originalVersions);
 
   const warnings: string[] = [];
   if (missingUrls.length > 0) {
@@ -582,30 +617,62 @@ function isOverEdited(
   return lengthDelta > maxLengthDelta || similarity < minSimilarity;
 }
 
-function parseReviewerJson(text: string): ReviewerResult | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<ReviewerResult>;
-    if (
-      typeof parsed.review === "string" &&
-      Array.isArray(parsed.keyImprovements) &&
-      Array.isArray(parsed.rewritePlan)
-    ) {
-      return {
-        review: parsed.review,
-        keyImprovements: parsed.keyImprovements.filter(
-          (item): item is string =>
-            typeof item === "string" && item.trim().length > 0,
-        ),
-        rewritePlan: parsed.rewritePlan.filter(
-          (item): item is string =>
-            typeof item === "string" && item.trim().length > 0,
-        ),
-      };
-    }
-    return null;
-  } catch {
+function toReviewerResult(value: unknown): ReviewerResult | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<ReviewerResult>;
+  if (
+    typeof parsed.review !== "string" ||
+    !Array.isArray(parsed.keyImprovements) ||
+    !Array.isArray(parsed.rewritePlan)
+  ) {
     return null;
   }
+  return {
+    review: parsed.review,
+    keyImprovements: parsed.keyImprovements.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    ),
+    rewritePlan: parsed.rewritePlan.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    ),
+  };
+}
+
+function buildFallbackReviewerResult(params: {
+  needsStructureRecovery: boolean;
+}): ReviewerResult {
+  if (params.needsStructureRecovery) {
+    return {
+      review:
+        "Rebuild markdown structure first, then apply a conservative readability polish while preserving facts.",
+      keyImprovements: [
+        "Formatting appears degraded and needs clear markdown hierarchy.",
+        "Content blocks should be grouped into headings and short paragraphs.",
+        "Code-like snippets should be fenced to preserve readability.",
+      ],
+      rewritePlan: [
+        "Create a single H1 title from the main topic and add H2/H3 headings only when supported by source content.",
+        "Split long runs of text into concise paragraphs and convert inline enumerations into bullet or numbered lists.",
+        "Wrap commands/code/log/config fragments in fenced code blocks with language tags only when obvious.",
+        "Preserve original facts, numbers, links, and version strings; avoid adding new claims.",
+      ],
+    };
+  }
+  return {
+    review:
+      "Apply a moderate polish that improves clarity and flow while keeping structure and meaning stable.",
+    keyImprovements: [
+      "Some sentences can be tightened for clarity and readability.",
+      "Tone and phrasing can be made more consistent across sections.",
+      "Minor grammar and concision improvements can reduce friction.",
+    ],
+    rewritePlan: [
+      "Preserve existing heading/list order unless a change is essential for comprehension.",
+      "Rewrite long or ambiguous sentences into concise, clear alternatives without changing factual meaning.",
+      "Keep technical details, numbers, links, and versions intact.",
+      "Return polished markdown only, without commentary.",
+    ],
+  };
 }
 
 function emptyAgentTokenUsage(): AgentTokenUsage {
@@ -668,17 +735,34 @@ async function runDualAgentReview(params: {
   isReasoningModel: boolean;
   openai: ReturnType<typeof createOpenAI>;
   onStage?: (event: StageEvent) => void;
+  abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
-  const { markdown, model, isReasoningModel, openai, onStage } = params;
+  const { markdown, model, isReasoningModel, openai, onStage, abortSignal } =
+    params;
+  const throwIfAborted = () => {
+    if (!abortSignal?.aborted) return;
+    const reason = abortSignal.reason;
+    throw reason instanceof Error ? reason : new Error("Request aborted.");
+  };
+
+  throwIfAborted();
   const structureSignals = buildStructureSignals(markdown);
   const needsStructureRecovery = structureSignals.isLikelyUnstructuredPlainText;
   const rawBlocksResult = parseRawBlocks(markdown, 40);
-  const codeRecoveryResult = recoverCodeBlocks(markdown, {
-    includeRecoveredMarkdown: markdown.length <= 6_000,
-    maxSuggestions: 12,
-  });
+  let codeRecoveryResultMemo: CodeRecoveryResult | null = null;
+  let codeRecoveryUsed = false;
+  const getCodeRecoveryResult = () => {
+    if (!codeRecoveryResultMemo) {
+      codeRecoveryResultMemo = recoverCodeBlocks(markdown, {
+        includeRecoveredMarkdown: markdown.length <= 6_000,
+        maxSuggestions: 12,
+      });
+    }
+    return codeRecoveryResultMemo;
+  };
   const reviewerUsage = emptyAgentTokenUsage();
   const editorUsage = emptyAgentTokenUsage();
+  const factualBaseline = buildFactualBaseline(markdown);
 
   onStage?.({
     agent: "reviewer",
@@ -689,63 +773,73 @@ async function runDualAgentReview(params: {
   });
 
   const reviewerSystem = [
-    "You are Reviewer Agent: an experienced editor for technical and business writing.",
-    "First judge whether the input is structured markdown or plain text with lost formatting.",
-    "Analyze markdown quality: clarity, structure, flow, tone consistency, grammar, concision, and readability.",
-    "If structure is missing, prioritize recovery of title, section headings, lists, and code fences.",
-    "Prefer practical improvements that noticeably improve readability without changing meaning.",
-    "Do not invent new facts.",
-    "Return strict JSON only, no markdown fences.",
+    "You are Reviewer Agent for technical and business markdown.",
+    "Assess clarity, structure, flow, tone consistency, grammar, concision, and scanability.",
+    "Prioritize high-impact issues and practical fixes over stylistic micro-edits.",
+    "If formatting seems lost, prioritize structure recovery (headings/lists/fenced code).",
+    "Preserve meaning and factual fidelity; do not invent claims.",
+    "Keep guidance concrete and directly executable.",
   ].join(" ");
   const reviewerPrompt = [
-    "Before final JSON output, call the `detectInputStructure` tool exactly once and use its result.",
-    "Review the markdown and output JSON in this exact shape:",
-    '{"review":"string","keyImprovements":["string"],"rewritePlan":["string"]}',
-    "Requirements:",
-    "- `review`: concise summary of optimization strategy, 1 sentence.",
-    "- `keyImprovements`: 3-5 concrete issues only.",
-    "- `rewritePlan`: 3-6 actionable rewrite instructions for an editor agent.",
-    "- If formatting seems lost, include explicit structure-recovery steps (H1/H2/H3, lists, code fences).",
-    "- Keep every instruction concrete and directly executable.",
+    "Create reviewer guidance for the markdown below.",
+    "review: one-sentence optimization strategy.",
+    "keyImprovements: 3-5 concrete quality issues, ranked by impact.",
+    "rewritePlan: 3-6 executable editing steps for an editor agent.",
+    "When relevant, include structure-specific steps (heading hierarchy, paragraph chunking, list normalization, code fence recovery).",
+    "Avoid vague advice; each step should imply a direct edit action.",
     "",
+    `Signals: unstructured=${needsStructureRecovery ? "yes" : "no"}; cues=${structureSignals.cues.join(", ") || "none"}; lines=${structureSignals.nonEmptyLineCount}; avgLine=${structureSignals.avgLineLength.toFixed(1)}.`,
+    "",
+    "Markdown:",
     markdown,
   ].join("\n");
-
-  const reviewer = await generateText({
-    model: openai(model),
-    ...(isReasoningModel ? {} : { temperature: 0.28 }),
-    system: reviewerSystem,
-    prompt: reviewerPrompt,
-    tools: {
-      detectInputStructure: tool({
-        description:
-          "Detect whether the input is likely unstructured plain text with lost markdown formatting.",
-        inputSchema: jsonSchema<Record<string, never>>({
-          type: "object",
-          properties: {},
-          additionalProperties: false,
-        }),
-        execute: async () => structureSignals,
-      }),
+  const reviewerSchema = jsonSchema<ReviewerResult>({
+    type: "object",
+    properties: {
+      review: { type: "string", minLength: 1 },
+      keyImprovements: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 3,
+        maxItems: 5,
+      },
+      rewritePlan: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 3,
+        maxItems: 6,
+      },
     },
-    toolChoice: "required",
-    stopWhen: stepCountIs(2),
+    required: ["review", "keyImprovements", "rewritePlan"],
+    additionalProperties: false,
   });
-  accumulateUsage(reviewerUsage, reviewer);
 
-  let reviewerResult = parseReviewerJson(reviewer.text);
-  if (!reviewerResult) {
-    const reviewerFallback = await generateText({
+  let reviewerResult = buildFallbackReviewerResult({
+    needsStructureRecovery,
+  });
+  try {
+    const reviewer = await generateObject({
       model: openai(model),
+      abortSignal,
       ...(isReasoningModel ? {} : { temperature: 0.28 }),
       system: reviewerSystem,
       prompt: reviewerPrompt,
+      schema: reviewerSchema,
+      schemaName: "reviewer_result",
+      providerOptions: {
+        openai: {
+          reasoningEffort: "low",
+          textVerbosity: "low",
+        },
+      },
     });
-    accumulateUsage(reviewerUsage, reviewerFallback);
-    reviewerResult = parseReviewerJson(reviewerFallback.text);
-  }
-  if (!reviewerResult) {
-    throw new Error("Failed to parse reviewer output.");
+    accumulateUsage(reviewerUsage, reviewer);
+    throwIfAborted();
+    reviewerResult =
+      toReviewerResult(reviewer.object) ??
+      buildFallbackReviewerResult({ needsStructureRecovery });
+  } catch (error) {
+    if (abortSignal?.aborted) throw error;
   }
 
   onStage?.({
@@ -765,40 +859,36 @@ async function runDualAgentReview(params: {
 
   const editorSystem = needsStructureRecovery
     ? [
-        "You are Editor Agent: an experienced editor rewriting markdown based on reviewer instructions.",
-        "The input may be plain text copied from the web with formatting lost.",
-        "Reconstruct clean, publishable markdown while preserving original meaning and factual claims.",
-        "Add a sensible H1 title and H2/H3 subsection headings only when supported by source content.",
-        "Convert inline enumerations into bullet or numbered lists where appropriate.",
-        "Wrap code, commands, logs, JSON, or config-like fragments in fenced code blocks; add language only when obvious.",
-        "Do not invent sections, claims, or examples not present in the source.",
-        "Prefer structure recovery first, then sentence-level polish.",
-        "Output polished markdown only. No explanations.",
+        "You are Editor Agent.",
+        "Output polished markdown only.",
+        "Input may have lost formatting; rebuild clean, publishable markdown structure first.",
+        "Use minimal H1/H2/H3, list normalization, and fenced code blocks when supported by source content.",
+        "Improve readability with concise paragraphs and clear information hierarchy.",
+        "Preserve facts and meaning; do not invent claims, examples, or unsupported sections.",
       ]
     : [
-        "You are Editor Agent: an experienced editor rewriting markdown based on reviewer instructions.",
-        "Produce polished markdown only.",
-        "Preserve meaning, factual claims, and markdown structure.",
-        "Make moderate, meaningful edits that improve clarity and flow.",
-        "Keep headings, paragraph order, and list structure unchanged unless a change is essential.",
-        "Sentence-level rewrites are allowed when they make the text clearer.",
-        "Avoid unnecessary stylistic rewrites.",
-        "Do not add explanations, code fences, or comments.",
+        "You are Editor Agent.",
+        "Output polished markdown only.",
+        "Improve clarity, flow, grammar, and concision with a consistent professional tone.",
+        "Preserve meaning, facts, numbers, links, versions, and markdown structure.",
+        "Keep heading/list order stable unless a change is clearly necessary for readability.",
+        "Prefer moderate rewrites; avoid full paraphrasing or ornamental style shifts.",
       ];
 
   const editor = await generateText({
     model: openai(model),
+    abortSignal,
     ...(isReasoningModel ? {} : { temperature: 0.22 }),
     system: editorSystem.join(" "),
     prompt: [
-      "Tool workflow requirements:",
-      "1. Call `parseRawBlocks` once to inspect likely structure.",
-      "2. If there are code candidates or code cues, call `recoverCodeBlocks` and apply the suggestions.",
-      "3. Before final output, call `factualGuard` with your draft markdown as `candidate`, then fix any high-risk factual drift.",
-      "4. Return polished markdown only.",
+      "Workflow rules:",
+      "- Call parseRawBlocks once.",
+      "- Call recoverCodeBlocks only when code cues/candidates matter.",
+      "- Call factualGuard on your draft; if risk is high, repair factual drift before final output.",
       "",
-      "Reviewer summary:",
-      reviewerResult.review,
+      "Quality targets: high readability, coherent hierarchy, concise wording, and factual precision.",
+      "",
+      `Reviewer summary: ${reviewerResult.review}`,
       "",
       "Key improvements:",
       ...reviewerResult.keyImprovements.map((item, idx) => `${idx + 1}. ${item}`),
@@ -807,8 +897,8 @@ async function runDualAgentReview(params: {
       ...reviewerResult.rewritePlan.map((item, idx) => `${idx + 1}. ${item}`),
       "",
       needsStructureRecovery
-        ? "Important: structure the original into markdown (title/headings/lists/code fences) without adding new facts."
-        : "Important: keep markdown structure stable unless essential for readability.",
+        ? "Mode: structure recovery with conservative factual fidelity."
+        : "Mode: light-to-moderate polish with structure stability.",
       "",
       "Original markdown:",
       markdown,
@@ -832,7 +922,10 @@ async function runDualAgentReview(params: {
           properties: {},
           additionalProperties: false,
         }),
-        execute: async () => codeRecoveryResult,
+        execute: async () => {
+          codeRecoveryUsed = true;
+          return getCodeRecoveryResult();
+        },
       }),
       factualGuard: tool({
         description:
@@ -845,7 +938,8 @@ async function runDualAgentReview(params: {
           required: ["candidate"],
           additionalProperties: false,
         }),
-        execute: async ({ candidate }) => factualGuard(markdown, candidate),
+        execute: async ({ candidate }) =>
+          factualGuardWithBaseline(factualBaseline, candidate),
       }),
     },
     toolChoice: "auto",
@@ -858,75 +952,70 @@ async function runDualAgentReview(params: {
     },
   });
   accumulateUsage(editorUsage, editor);
+  throwIfAborted();
 
   const before = normalizeMarkdownForCompare(markdown);
   let polishedMarkdown = editor.text.trim();
   let changed = normalizeMarkdownForCompare(polishedMarkdown) !== before;
   let factualRisk = polishedMarkdown
-    ? factualGuard(markdown, polishedMarkdown)
+    ? factualGuardWithBaseline(factualBaseline, polishedMarkdown)
     : null;
 
   if (!polishedMarkdown) {
     polishedMarkdown = markdown;
     changed = false;
-    factualRisk = factualGuard(markdown, polishedMarkdown);
-  } else if (
-    (factualRisk?.riskLevel === "high" && !needsStructureRecovery) ||
-    isOverEdited(markdown, polishedMarkdown, {
-      allowStructureRebuild: needsStructureRecovery,
-    })
-  ) {
+    factualRisk = factualGuardWithBaseline(factualBaseline, polishedMarkdown);
+  } else if (factualRisk?.riskLevel === "high") {
     onStage?.({
       agent: "editor",
       status: "started",
-      message:
-        factualRisk?.riskLevel === "high"
-          ? "Reducing factual drift and tightening fidelity..."
-          : "Tuning the draft for a lighter touch...",
+      message: "Reducing factual drift and tightening fidelity...",
     });
     const conservativeSystem = needsStructureRecovery
       ? [
           "You are Editor Agent.",
-          "Your previous rewrite was too aggressive.",
-          "Rebuild markdown structure conservatively from the original text.",
-          "Keep factual content intact, and only add minimal headings/lists/code fences needed for readability.",
-          "Output only markdown without explanations.",
+          "Previous rewrite introduced factual drift.",
+          "Rebuild markdown conservatively from the original source.",
+          "Use minimal headings/lists/code fences only when clearly supported.",
+          "Prioritize factual fidelity over style improvements.",
+          "Output markdown only.",
         ]
       : [
           "You are Editor Agent.",
-          "Apply a balanced polish with restrained rewrites.",
-          "Keep structure and ordering intact.",
-          "Improve clarity and rhythm, but avoid full paraphrasing.",
-          "Preserve original facts, numbers, links, and versions unless clearly wrong in source.",
-          "Output only markdown without explanations.",
+          "Apply restrained edits only.",
+          "Keep structure/order intact and avoid full paraphrasing.",
+          "Preserve facts, numbers, links, and versions with high precision.",
+          "Favor minimal-change repairs that reduce drift.",
+          "Output markdown only.",
         ];
     const conservativeRetry = await generateText({
       model: openai(model),
+      abortSignal,
       ...(isReasoningModel ? {} : { temperature: 0.14 }),
       system: conservativeSystem.join(" "),
       prompt: [
         "Original markdown:",
         markdown,
         "",
-        "Over-edited draft (for reference, do not copy large rewrites):",
+        "Current draft:",
         polishedMarkdown,
         "",
         factualRisk
-          ? `Factual guard summary: risk=${factualRisk.riskLevel}; warnings=${factualRisk.warnings.join(" | ") || "none"}`
+          ? `Risk=${factualRisk.riskLevel}; warnings=${factualRisk.warnings.join(" | ") || "none"}`
           : "",
         factualRisk
           ? `Missing numbers: ${factualRisk.missingNumbers.join(", ") || "none"}`
           : "",
         factualRisk
-          ? `Missing urls: ${factualRisk.missingUrls.join(", ") || "none"}`
+          ? `Missing URLs: ${factualRisk.missingUrls.join(", ") || "none"}`
           : "",
         factualRisk
           ? `Missing versions: ${factualRisk.missingVersions.join(", ") || "none"}`
           : "",
         "",
         needsStructureRecovery
-          ? "Now produce a conservative, clearly structured markdown version of the original."
-          : "Now produce a lightly polished version of the original with minimal edits and high factual fidelity.",
+          ? "Return a conservative structured markdown version."
+          : "Return a lightly polished, high-fidelity version.",
       ].join("\n"),
       providerOptions: {
         openai: {
@@ -936,9 +1025,12 @@ async function runDualAgentReview(params: {
       },
     });
     accumulateUsage(editorUsage, conservativeRetry);
+    throwIfAborted();
 
     const retried = conservativeRetry.text.trim();
-    const retriedRisk = retried ? factualGuard(markdown, retried) : null;
+    const retriedRisk = retried
+      ? factualGuardWithBaseline(factualBaseline, retried)
+      : null;
     if (
       retried &&
       retriedRisk?.riskLevel !== "high" &&
@@ -974,7 +1066,7 @@ async function runDualAgentReview(params: {
     ) {
       polishedMarkdown = markdown;
     }
-    factualRisk = factualGuard(markdown, polishedMarkdown);
+    factualRisk = factualGuardWithBaseline(factualBaseline, polishedMarkdown);
     changed = normalizeMarkdownForCompare(polishedMarkdown) !== before;
   }
 
@@ -1001,7 +1093,9 @@ async function runDualAgentReview(params: {
       headingCandidateCount: rawBlocksResult.headingCandidateCount,
       listCandidateCount: rawBlocksResult.listCandidateCount,
       codeCandidateCount: rawBlocksResult.codeCandidateCount,
-      recoveredCodeBlockCount: codeRecoveryResult.recoveredBlockCount,
+      recoveredCodeBlockCount: codeRecoveryUsed
+        ? getCodeRecoveryResult().recoveredBlockCount
+        : 0,
       factualRiskLevel: factualRisk?.riskLevel ?? "low",
       factualWarnings: factualRisk?.warnings ?? [],
     },
@@ -1024,6 +1118,17 @@ export async function POST(req: Request) {
     if (markdown.length > MAX_MARKDOWN_LEN) {
       return NextResponse.json(
         { error: `Markdown too large (max ${MAX_MARKDOWN_LEN} chars).` },
+        { status: 413 },
+      );
+    }
+
+    const estimatedInputTokens = estimateInputTokens(markdown);
+    const maxInputTokens = resolveMaxInputTokens();
+    if (estimatedInputTokens > maxInputTokens) {
+      return NextResponse.json(
+        {
+          error: `Markdown too large (estimated ${estimatedInputTokens} input tokens; limit ${maxInputTokens}).`,
+        },
         { status: 413 },
       );
     }
@@ -1053,6 +1158,7 @@ export async function POST(req: Request) {
         model,
         isReasoningModel,
         openai,
+        abortSignal: req.signal,
       });
       return NextResponse.json(result);
     }
@@ -1063,10 +1169,25 @@ export async function POST(req: Request) {
       event: string,
       data: unknown,
     ) => {
-      controller.enqueue(
-        encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-      );
+      try {
+        controller.enqueue(
+          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+        );
+      } catch {
+        // Ignore enqueue errors if stream is already closed/canceled.
+      }
     };
+    const streamAbortController = new AbortController();
+    const abortStreamWork = (reason?: unknown) => {
+      if (!streamAbortController.signal.aborted) {
+        streamAbortController.abort(reason);
+      }
+    };
+    req.signal.addEventListener(
+      "abort",
+      () => abortStreamWork(req.signal.reason),
+      { once: true },
+    );
 
     const stream = new ReadableStream<Uint8Array>({
       start: async (controller) => {
@@ -1077,15 +1198,25 @@ export async function POST(req: Request) {
             isReasoningModel,
             openai,
             onStage: (stage) => sendEvent(controller, "stage", stage),
+            abortSignal: streamAbortController.signal,
           });
           sendEvent(controller, "result", result);
         } catch (error) {
-          sendEvent(controller, "error", {
-            message: error instanceof Error ? error.message : "AI review failed.",
-          });
+          if (!streamAbortController.signal.aborted) {
+            sendEvent(controller, "error", {
+              message: error instanceof Error ? error.message : "AI review failed.",
+            });
+          }
         } finally {
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            // Stream may already be closed/canceled by the client.
+          }
         }
+      },
+      cancel: (reason) => {
+        abortStreamWork(reason);
       },
     });
 
