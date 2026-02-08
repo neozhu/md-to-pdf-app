@@ -18,6 +18,7 @@ import { printMarkdownLocally } from "@/lib/markdown/print";
 import {
   AiReviewProgressDialog,
   type AiAgent,
+  type AiAgentTokenUsage,
 } from "./ai-review-progress-dialog";
 import { MdDashboardHeader } from "./md-dashboard-header";
 import { MdHistorySidebarContent } from "./md-history-sidebar-content";
@@ -40,11 +41,16 @@ type AiToolInsights = {
   factualRiskLevel?: "low" | "medium" | "high";
   factualWarnings?: string[];
 };
+type AiTokenUsage = {
+  reviewer?: AiAgentTokenUsage;
+  editor?: AiAgentTokenUsage;
+};
 type AiReviewResponse = {
   review?: string;
   keyImprovements?: string[];
   polishedMarkdown?: string;
   changed?: boolean;
+  tokenUsage?: AiTokenUsage;
   toolInsights?: AiToolInsights;
   error?: string;
 };
@@ -74,6 +80,27 @@ function formatToolInsights(insights?: AiToolInsights) {
     parts.push(factualWarnings[0]);
   }
   return parts.join(" · ");
+}
+
+function resolveTotalTokens(usage?: AiAgentTokenUsage) {
+  if (!usage) return 0;
+  if (typeof usage.totalTokens === "number" && usage.totalTokens > 0) {
+    return usage.totalTokens;
+  }
+  return (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+}
+
+function formatTokenUsageSummary(tokenUsage?: AiTokenUsage) {
+  if (!tokenUsage) return "";
+  const reviewer = resolveTotalTokens(tokenUsage.reviewer);
+  const editor = resolveTotalTokens(tokenUsage.editor);
+  const parts: string[] = [];
+  if (reviewer > 0) parts.push(`review ${reviewer.toLocaleString()}`);
+  if (editor > 0) parts.push(`edit ${editor.toLocaleString()}`);
+  if (reviewer > 0 && editor > 0) {
+    parts.push(`total ${(reviewer + editor).toLocaleString()}`);
+  }
+  return parts.length > 0 ? `tokens ${parts.join(" / ")}` : "";
 }
 
 function WorkbenchHeader({ title }: { title: string }) {
@@ -184,6 +211,13 @@ export function MdDashboard() {
   const [aiActiveAgent, setAiActiveAgent] = React.useState<AiAgent>(null);
   const [aiDialogMessage, setAiDialogMessage] = React.useState("");
   const [aiDialogError, setAiDialogError] = React.useState<string | null>(null);
+  const [aiTokenUsage, setAiTokenUsage] = React.useState<AiTokenUsage>({});
+  const [aiCompleted, setAiCompleted] = React.useState(false);
+  const [aiCompletionChanged, setAiCompletionChanged] = React.useState(false);
+  const [aiCompletionSummary, setAiCompletionSummary] = React.useState("");
+  const [aiCompletionImprovements, setAiCompletionImprovements] = React.useState<
+    string[]
+  >([]);
   const [isAiDialogOpen, setIsAiDialogOpen] = React.useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
@@ -374,6 +408,11 @@ export function MdDashboard() {
     setAiDialogError(null);
     setAiActiveAgent("reviewer");
     setAiDialogMessage("Reviewer Agent is preparing...");
+    setAiTokenUsage({});
+    setAiCompleted(false);
+    setAiCompletionChanged(false);
+    setAiCompletionSummary("");
+    setAiCompletionImprovements([]);
 
     try {
       const res = await fetch("/api/ai-review?stream=1", {
@@ -434,9 +473,16 @@ export function MdDashboard() {
               agent?: AiAgent;
               message?: string;
               status?: "started" | "completed";
+              usage?: AiAgentTokenUsage;
             };
             if (stage.agent === "reviewer" || stage.agent === "editor") {
               setAiActiveAgent(stage.agent);
+              if (stage.usage) {
+                setAiTokenUsage((prev) => ({
+                  ...prev,
+                  [stage.agent as "reviewer" | "editor"]: stage.usage,
+                }));
+              }
             }
             if (stage.message) {
               setAiDialogMessage(stage.message);
@@ -462,26 +508,33 @@ export function MdDashboard() {
       const detail = Array.isArray(data.keyImprovements)
         ? data.keyImprovements.slice(0, 3).join(" | ")
         : "";
-      const insightsSummary = formatToolInsights(data.toolInsights);
+      const tokenSummary = formatTokenUsageSummary(data.tokenUsage ?? aiTokenUsage);
+
+      if (data.tokenUsage) {
+        setAiTokenUsage(data.tokenUsage);
+      }
+      setAiCompleted(true);
+      setAiCompletionChanged(data.changed !== false);
+      setAiCompletionSummary(summary);
+      setAiCompletionImprovements(
+        Array.isArray(data.keyImprovements)
+          ? data.keyImprovements.slice(0, 3)
+          : [],
+      );
+      setAiDialogMessage("All done. Review the result below and close this window.");
+      setAiActiveAgent("editor");
 
       if (data.changed === false) {
-        toast.message("AI reviewed the document but found only minimal edits.", {
-          description: insightsSummary ? `${summary} · ${insightsSummary}` : summary,
+        toast.message("AI review completed", {
+          description: tokenSummary || "No token usage reported.",
           duration: 4000,
         });
       } else {
-        toast.success("AI optimization applied", {
-          description: detail ? `${summary} · ${detail}` : summary,
+        toast.success("AI optimization completed", {
+          description: tokenSummary || "No token usage reported.",
           duration: 4500,
         });
-        if (insightsSummary) {
-          toast.message("AI tool insights", {
-            description: insightsSummary,
-            duration: 4500,
-          });
-        }
       }
-      setIsAiDialogOpen(false);
     } catch (e) {
       const message = e instanceof Error ? e.message : "AI review failed.";
       setAiDialogError(message);
@@ -713,6 +766,11 @@ export function MdDashboard() {
           activeAgent={aiActiveAgent}
           dialogError={aiDialogError}
           dialogMessage={aiDialogMessage}
+          completed={aiCompleted}
+          completionChanged={aiCompletionChanged}
+          completionSummary={aiCompletionSummary}
+          completionImprovements={aiCompletionImprovements}
+          tokenUsage={aiTokenUsage}
           isAiReviewing={isAiReviewing}
           onClose={() => setIsAiDialogOpen(false)}
         />

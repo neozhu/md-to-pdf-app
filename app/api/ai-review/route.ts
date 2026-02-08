@@ -12,11 +12,26 @@ type ReviewerResult = {
   rewritePlan: string[];
 };
 
+type AgentTokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  reasoningTokens: number;
+  cachedInputTokens: number;
+  calls: number;
+};
+
+type AgentTokenUsageSummary = {
+  reviewer: AgentTokenUsage;
+  editor: AgentTokenUsage;
+};
+
 type AiReviewPayload = {
   review: string;
   keyImprovements: string[];
   polishedMarkdown: string;
   changed: boolean;
+  tokenUsage: AgentTokenUsageSummary;
   toolInsights: {
     structureRecoveryDetected: boolean;
     structureCues: string[];
@@ -34,6 +49,7 @@ type StageEvent = {
   agent: "reviewer" | "editor";
   status: "started" | "completed";
   message: string;
+  usage?: AgentTokenUsage;
 };
 
 type StructureSignals = {
@@ -592,6 +608,60 @@ function parseReviewerJson(text: string): ReviewerResult | null {
   }
 }
 
+function emptyAgentTokenUsage(): AgentTokenUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    reasoningTokens: 0,
+    cachedInputTokens: 0,
+    calls: 0,
+  };
+}
+
+function normalizeAgentTokenUsage(usage: AgentTokenUsage): AgentTokenUsage {
+  const normalizedTotal =
+    usage.totalTokens > 0
+      ? usage.totalTokens
+      : Math.max(0, usage.inputTokens + usage.outputTokens);
+  return {
+    ...usage,
+    totalTokens: normalizedTotal,
+  };
+}
+
+function accumulateUsage(
+  accumulator: AgentTokenUsage,
+  result: {
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
+  },
+) {
+  accumulator.calls += 1;
+  const usage = result.usage;
+  if (!usage) return;
+  if (typeof usage.inputTokens === "number") {
+    accumulator.inputTokens += usage.inputTokens;
+  }
+  if (typeof usage.outputTokens === "number") {
+    accumulator.outputTokens += usage.outputTokens;
+  }
+  if (typeof usage.totalTokens === "number") {
+    accumulator.totalTokens += usage.totalTokens;
+  }
+  if (typeof usage.reasoningTokens === "number") {
+    accumulator.reasoningTokens += usage.reasoningTokens;
+  }
+  if (typeof usage.cachedInputTokens === "number") {
+    accumulator.cachedInputTokens += usage.cachedInputTokens;
+  }
+}
+
 async function runDualAgentReview(params: {
   markdown: string;
   model: string;
@@ -607,6 +677,8 @@ async function runDualAgentReview(params: {
     includeRecoveredMarkdown: markdown.length <= 6_000,
     maxSuggestions: 12,
   });
+  const reviewerUsage = emptyAgentTokenUsage();
+  const editorUsage = emptyAgentTokenUsage();
 
   onStage?.({
     agent: "reviewer",
@@ -659,6 +731,7 @@ async function runDualAgentReview(params: {
     toolChoice: "required",
     stopWhen: stepCountIs(2),
   });
+  accumulateUsage(reviewerUsage, reviewer);
 
   let reviewerResult = parseReviewerJson(reviewer.text);
   if (!reviewerResult) {
@@ -668,6 +741,7 @@ async function runDualAgentReview(params: {
       system: reviewerSystem,
       prompt: reviewerPrompt,
     });
+    accumulateUsage(reviewerUsage, reviewerFallback);
     reviewerResult = parseReviewerJson(reviewerFallback.text);
   }
   if (!reviewerResult) {
@@ -678,6 +752,7 @@ async function runDualAgentReview(params: {
     agent: "reviewer",
     status: "completed",
     message: "Review pass complete.",
+    usage: normalizeAgentTokenUsage(reviewerUsage),
   });
 
   onStage?.({
@@ -782,6 +857,7 @@ async function runDualAgentReview(params: {
       },
     },
   });
+  accumulateUsage(editorUsage, editor);
 
   const before = normalizeMarkdownForCompare(markdown);
   let polishedMarkdown = editor.text.trim();
@@ -859,6 +935,7 @@ async function runDualAgentReview(params: {
         },
       },
     });
+    accumulateUsage(editorUsage, conservativeRetry);
 
     const retried = conservativeRetry.text.trim();
     const retriedRisk = retried ? factualGuard(markdown, retried) : null;
@@ -905,6 +982,7 @@ async function runDualAgentReview(params: {
     agent: "editor",
     status: "completed",
     message: "Polish pass complete.",
+    usage: normalizeAgentTokenUsage(editorUsage),
   });
 
   return {
@@ -912,6 +990,10 @@ async function runDualAgentReview(params: {
     keyImprovements: reviewerResult.keyImprovements,
     polishedMarkdown,
     changed,
+    tokenUsage: {
+      reviewer: normalizeAgentTokenUsage(reviewerUsage),
+      editor: normalizeAgentTokenUsage(editorUsage),
+    },
     toolInsights: {
       structureRecoveryDetected: needsStructureRecovery,
       structureCues: structureSignals.cues,

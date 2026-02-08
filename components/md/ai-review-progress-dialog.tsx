@@ -5,12 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export type AiAgent = "reviewer" | "editor" | null;
+export type AiAgentTokenUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  calls?: number;
+};
 
 type AiReviewProgressDialogProps = {
   open: boolean;
   activeAgent: AiAgent;
   dialogError: string | null;
   dialogMessage: string;
+  completed: boolean;
+  completionChanged: boolean;
+  completionSummary?: string;
+  completionImprovements?: string[];
+  tokenUsage?: {
+    reviewer?: AiAgentTokenUsage;
+    editor?: AiAgentTokenUsage;
+  };
   isAiReviewing: boolean;
   onClose: () => void;
 };
@@ -20,6 +34,11 @@ export function AiReviewProgressDialog({
   activeAgent,
   dialogError,
   dialogMessage,
+  completed,
+  completionChanged,
+  completionSummary,
+  completionImprovements,
+  tokenUsage,
   isAiReviewing,
   onClose,
 }: AiReviewProgressDialogProps) {
@@ -32,7 +51,7 @@ export function AiReviewProgressDialog({
           <div className="text-sm font-semibold">Improving Your Document</div>
           <div className="text-xs text-muted-foreground">
             Please hang tight while we polish your writing. This window will close
-            automatically when everything is ready.
+            when you close it.
           </div>
 
           <div className="space-y-2 rounded-md border p-3">
@@ -40,6 +59,7 @@ export function AiReviewProgressDialog({
               title="Review Pass"
               active={activeAgent === "reviewer" && !dialogError}
               done={activeAgent === "editor" && !dialogError}
+              tokenUsage={tokenUsage?.reviewer}
             />
             <AgentRow
               title="Polish Pass"
@@ -47,19 +67,43 @@ export function AiReviewProgressDialog({
               done={
                 dialogError ? false : activeAgent === "editor" && !isAiReviewing
               }
+              tokenUsage={tokenUsage?.editor}
             />
           </div>
 
           <div className="min-h-6 text-xs text-muted-foreground">{dialogMessage}</div>
+
+          {completed && !dialogError && (
+            <div className="space-y-3 rounded-md border border-emerald-300/60 bg-emerald-50/70 px-3 py-3 text-xs dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <div className="font-semibold text-emerald-700 dark:text-emerald-300">
+                {completionChanged
+                  ? "AI optimization applied"
+                  : "AI review completed (minimal edits)"}
+              </div>
+              {completionSummary && (
+                <div className="text-foreground/90">{completionSummary}</div>
+              )}
+              {(completionImprovements?.length ?? 0) > 0 && (
+                <ul className="list-disc space-y-1 pl-4 text-foreground/80">
+                  {completionImprovements?.slice(0, 3).map((item, idx) => (
+                    <li key={`${idx}-${item}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {dialogError && (
             <div className="space-y-3">
               <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                 {dialogError}
               </div>
-              <div className="flex justify-end">
-                <Button onClick={onClose}>Close</Button>
-              </div>
+            </div>
+          )}
+
+          {(dialogError || completed) && (
+            <div className="flex justify-end">
+              <Button onClick={onClose}>Close</Button>
             </div>
           )}
         </div>
@@ -72,14 +116,36 @@ function AgentRow({
   title,
   active,
   done,
+  tokenUsage,
 }: {
   title: string;
   active: boolean;
   done: boolean;
+  tokenUsage?: AiAgentTokenUsage;
 }) {
+  const totalTokens =
+    typeof tokenUsage?.totalTokens === "number"
+      ? tokenUsage.totalTokens
+      : (tokenUsage?.inputTokens ?? 0) + (tokenUsage?.outputTokens ?? 0);
+  const tokenText =
+    totalTokens > 0
+      ? `${totalTokens.toLocaleString()} tokens${
+          tokenUsage?.calls && tokenUsage.calls > 1
+            ? ` (${tokenUsage.calls} calls)`
+            : ""
+        }`
+      : null;
+
   return (
     <div className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
-      <span className="font-medium">{title}</span>
+      <span className="space-y-0.5">
+        <span className="block font-medium">{title}</span>
+        {tokenText && (
+          <span className="block text-[11px] text-muted-foreground">
+            {tokenText}
+          </span>
+        )}
+      </span>
       {done ? (
         <span className="text-emerald-600">Done</span>
       ) : active ? (
