@@ -47,16 +47,15 @@ let cached:
 export function getSupabaseServerClient() {
   if (cached) return cached;
 
-  const url =
-    process.env.SUPABASE_URL ??
+  const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ??
-    getRequiredEnv("SUPABASE_URL");
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL");
 
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseKey  =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ??
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY");
 
-  cached = createClient<Database>(url, serviceRoleKey, {
+  cached = createClient<Database>(supabaseUrl, supabaseKey , {
     auth: { persistSession: false },
   });
 

@@ -192,7 +192,7 @@ NODE_ENV=development
 # Supabase (MD History persistence)
 # Create the table using docs/supabase/md_history_docs.sql
 NEXT_PUBLIC_SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 
 # OpenAI (AI review & polish)
 OPENAI_API_KEY=
