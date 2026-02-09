@@ -215,6 +215,8 @@ type PrecomputedWorkflowContext = {
   factualBaseline: FactualBaseline;
 };
 
+type OpenAIStage = "formatter" | "reviewer" | "editor";
+
 function normalizeMarkdownForCompare(input: string) {
   return input.replace(/\s+/g, " ").trim();
 }
@@ -834,6 +836,22 @@ function buildEditorPrompt(params: {
   ].join("\n");
 }
 
+function getOpenAIProviderOptions(stage: OpenAIStage) {
+  const reasoningEffort =
+    stage === "formatter"
+      ? "minimal"
+      : stage === "reviewer"
+        ? "medium"
+        : "low";
+  return {
+    openai: {
+      reasoningEffort,
+      textVerbosity: "low",
+      ...(stage === "reviewer" ? { strictJsonSchema: true } : {}),
+    },
+  } as const;
+}
+
 function emptyAgentTokenUsage(): AgentTokenUsage {
   return {
     inputTokens: 0,
@@ -891,13 +909,11 @@ function accumulateUsage(
 async function runDualAgentReview(params: {
   markdown: string;
   model: string;
-  isReasoningModel: boolean;
   openai: ReturnType<typeof createOpenAI>;
   onStage?: (event: StageEvent) => void;
   abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
-  const { markdown, model, isReasoningModel, openai, onStage, abortSignal } =
-    params;
+  const { markdown, model, openai, onStage, abortSignal } = params;
   const throwIfAborted = () => {
     if (!abortSignal?.aborted) return;
     const reason = abortSignal.reason;
@@ -928,19 +944,13 @@ async function runDualAgentReview(params: {
     const formatterResult = await generateText({
       model: openai(model),
       abortSignal,
-      ...(isReasoningModel ? {} : { temperature: 0 }),
       system: FORMATTER_SYSTEM_PROMPT,
       prompt: buildFormatterPrompt({
         markdown,
         rawBlocksResult: workflow.rawBlocksResult,
         codeRecoveryResult: workflow.codeRecoveryResult,
       }),
-      providerOptions: {
-        openai: {
-          reasoningEffort: "low",
-          textVerbosity: "low",
-        },
-      },
+      providerOptions: getOpenAIProviderOptions("formatter"),
     });
     accumulateUsage(editorUsage, formatterResult);
     throwIfAborted();
@@ -993,7 +1003,6 @@ async function runDualAgentReview(params: {
       const reviewer = await generateText({
         model: openai(model),
         abortSignal,
-        ...(isReasoningModel ? {} : { temperature: 0.3 }),
         system: REVIEWER_SYSTEM_PROMPT,
         prompt: buildReviewerPrompt({
           markdown,
@@ -1005,12 +1014,7 @@ async function runDualAgentReview(params: {
           schema: reviewerSchema,
           name: "reviewer_result",
         }),
-        providerOptions: {
-          openai: {
-            reasoningEffort: "low",
-            textVerbosity: "low",
-          },
-        },
+        providerOptions: getOpenAIProviderOptions("reviewer"),
       });
       accumulateUsage(reviewerUsage, reviewer);
       throwIfAborted();
@@ -1037,19 +1041,13 @@ async function runDualAgentReview(params: {
     const editorResult = await generateText({
       model: openai(model),
       abortSignal,
-      ...(isReasoningModel ? {} : { temperature: 0.2 }),
       system: EDITOR_SYSTEM_PROMPT,
       prompt: buildEditorPrompt({
         markdown,
         reviewerResult,
         factualBaseline: workflow.factualBaseline,
       }),
-      providerOptions: {
-        openai: {
-          reasoningEffort: "low",
-          textVerbosity: "low",
-        },
-      },
+      providerOptions: getOpenAIProviderOptions("editor"),
     });
     accumulateUsage(editorUsage, editorResult);
     throwIfAborted();
@@ -1152,7 +1150,6 @@ export async function POST(req: Request) {
       apiKey,
       ...(baseUrl ? { baseURL: baseUrl } : {}),
     });
-    const isReasoningModel = /^(gpt-5|o1|o3|o4)/i.test(model);
     const wantsStream =
       req.headers.get("accept")?.includes("text/event-stream") ||
       new URL(req.url).searchParams.get("stream") === "1";
@@ -1161,7 +1158,6 @@ export async function POST(req: Request) {
       const result = await runDualAgentReview({
         markdown,
         model,
-        isReasoningModel,
         openai,
         abortSignal: req.signal,
       });
@@ -1200,7 +1196,6 @@ export async function POST(req: Request) {
           const result = await runDualAgentReview({
             markdown,
             model,
-            isReasoningModel,
             openai,
             onStage: (stage) => sendEvent(controller, "stage", stage),
             abortSignal: streamAbortController.signal,
