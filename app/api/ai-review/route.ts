@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateObject, generateText, jsonSchema } from "ai";
+import { generateText, jsonSchema, Output } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 
 export const runtime = "nodejs";
@@ -978,7 +978,7 @@ async function runDualAgentReview(params: {
 
     let reviewerResult = buildFallbackReviewerResult();
     try {
-      const reviewer = await generateObject({
+      const reviewer = await generateText({
         model: openai(model),
         abortSignal,
         ...(isReasoningModel ? {} : { temperature: 0.3 }),
@@ -989,8 +989,10 @@ async function runDualAgentReview(params: {
           rawBlocksResult: workflow.rawBlocksResult,
           codeRecoveryResult: workflow.codeRecoveryResult,
         }),
-        schema: reviewerSchema,
-        schemaName: "reviewer_result",
+        output: Output.object({
+          schema: reviewerSchema,
+          name: "reviewer_result",
+        }),
         providerOptions: {
           openai: {
             reasoningEffort: "low",
@@ -1000,7 +1002,7 @@ async function runDualAgentReview(params: {
       });
       accumulateUsage(reviewerUsage, reviewer);
       throwIfAborted();
-      reviewerResult = toReviewerResult(reviewer.object) ?? buildFallbackReviewerResult();
+      reviewerResult = toReviewerResult(reviewer.output) ?? buildFallbackReviewerResult();
     } catch (error) {
       if (abortSignal?.aborted) throw error;
     }
