@@ -54,6 +54,13 @@ type AiReviewResponse = {
   toolInsights?: AiToolInsights;
   error?: string;
 };
+type AiPendingDecision = {
+  polishedMarkdown: string;
+  tokenSummary: string;
+  insightSummary: string;
+  factualRiskLevel?: "low" | "medium" | "high";
+  factualWarnings: string[];
+};
 
 function formatToolInsights(insights?: AiToolInsights) {
   if (!insights) return "";
@@ -218,6 +225,9 @@ export function MdDashboard() {
   const [aiCompletionImprovements, setAiCompletionImprovements] = React.useState<
     string[]
   >([]);
+  const [aiPendingDecision, setAiPendingDecision] = React.useState<
+    AiPendingDecision | null
+  >(null);
   const [isAiDialogOpen, setIsAiDialogOpen] = React.useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
@@ -397,6 +407,41 @@ export function MdDashboard() {
     }
   }
 
+  const onAcceptAiChanges = React.useCallback(() => {
+    if (!aiPendingDecision) return;
+    didUserEditRef.current = true;
+    setMarkdownText(aiPendingDecision.polishedMarkdown);
+    const description = [
+      aiPendingDecision.tokenSummary,
+      aiPendingDecision.insightSummary,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    toast.success("AI changes applied", {
+      description: description || "Markdown updated.",
+      duration: 4500,
+    });
+    setAiDialogMessage("Changes applied.");
+    setAiPendingDecision(null);
+    setIsAiDialogOpen(false);
+  }, [aiPendingDecision]);
+
+  const onRejectAiChanges = React.useCallback(() => {
+    const description = [
+      aiPendingDecision?.tokenSummary ?? "",
+      aiPendingDecision?.insightSummary ?? "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    toast.message("Kept original markdown", {
+      description: description || "No changes applied.",
+      duration: 4000,
+    });
+    setAiDialogMessage("Original markdown kept.");
+    setAiPendingDecision(null);
+    setIsAiDialogOpen(false);
+  }, [aiPendingDecision]);
+
   async function onAiReview() {
     if (!markdownText.trim()) {
       toast.error("Please write some Markdown first.");
@@ -413,6 +458,7 @@ export function MdDashboard() {
     setAiCompletionChanged(false);
     setAiCompletionSummary("");
     setAiCompletionImprovements([]);
+    setAiPendingDecision(null);
 
     try {
       const res = await fetch("/api/ai-review?stream=1", {
@@ -501,14 +547,12 @@ export function MdDashboard() {
         throw new Error("AI response missing polished markdown.");
       }
 
-      didUserEditRef.current = true;
-      setMarkdownText(data.polishedMarkdown);
-
       const summary = data.review?.trim() || "Document polished by AI editor.";
-      const detail = Array.isArray(data.keyImprovements)
-        ? data.keyImprovements.slice(0, 3).join(" | ")
-        : "";
       const tokenSummary = formatTokenUsageSummary(data.tokenUsage ?? aiTokenUsage);
+      const insightSummary = formatToolInsights(data.toolInsights);
+      const reviewDescription = [tokenSummary, insightSummary]
+        .filter(Boolean)
+        .join(" · ");
 
       if (data.tokenUsage) {
         setAiTokenUsage(data.tokenUsage);
@@ -521,24 +565,33 @@ export function MdDashboard() {
           ? data.keyImprovements.slice(0, 3)
           : [],
       );
-      setAiDialogMessage("All done. Review the result below and close this window.");
+      setAiDialogMessage(
+        data.changed === false
+          ? "No substantial rewrite suggested. You can close this window."
+          : "Review complete. Accept changes or keep original.",
+      );
       setAiActiveAgent("editor");
 
       if (data.changed === false) {
+        setAiPendingDecision(null);
         toast.message("AI review completed", {
-          description: tokenSummary || "No token usage reported.",
+          description: reviewDescription || "No token usage reported.",
           duration: 4000,
         });
       } else {
-        toast.success("AI optimization completed", {
-          description: tokenSummary || "No token usage reported.",
-          duration: 4500,
+        setAiPendingDecision({
+          polishedMarkdown: data.polishedMarkdown,
+          tokenSummary,
+          insightSummary,
+          factualRiskLevel: data.toolInsights?.factualRiskLevel,
+          factualWarnings: data.toolInsights?.factualWarnings ?? [],
         });
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "AI review failed.";
       setAiDialogError(message);
       setAiDialogMessage("Execution stopped due to an error.");
+      setAiPendingDecision(null);
       toast.error(message);
     } finally {
       setIsAiReviewing(false);
@@ -770,9 +823,17 @@ export function MdDashboard() {
           completionChanged={aiCompletionChanged}
           completionSummary={aiCompletionSummary}
           completionImprovements={aiCompletionImprovements}
+          decisionPending={Boolean(aiPendingDecision)}
+          pendingRiskLevel={aiPendingDecision?.factualRiskLevel}
+          pendingWarnings={aiPendingDecision?.factualWarnings}
           tokenUsage={aiTokenUsage}
           isAiReviewing={isAiReviewing}
-          onClose={() => setIsAiDialogOpen(false)}
+          onAccept={onAcceptAiChanges}
+          onReject={onRejectAiChanges}
+          onClose={() => {
+            setAiPendingDecision(null);
+            setIsAiDialogOpen(false);
+          }}
         />
       </div>
     </div>

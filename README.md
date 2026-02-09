@@ -197,7 +197,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 # OpenAI (AI review & polish)
 OPENAI_API_KEY=
 # Optional
-# OPENAI_MODEL=gpt-4o-mini
+# OPENAI_MODEL=gpt-5-mini
 # OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 

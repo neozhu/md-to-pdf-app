@@ -21,11 +21,16 @@ type AiReviewProgressDialogProps = {
   completionChanged: boolean;
   completionSummary?: string;
   completionImprovements?: string[];
+  decisionPending: boolean;
+  pendingRiskLevel?: "low" | "medium" | "high";
+  pendingWarnings?: string[];
   tokenUsage?: {
     reviewer?: AiAgentTokenUsage;
     editor?: AiAgentTokenUsage;
   };
   isAiReviewing: boolean;
+  onAccept: () => void;
+  onReject: () => void;
   onClose: () => void;
 };
 
@@ -38,8 +43,13 @@ export function AiReviewProgressDialog({
   completionChanged,
   completionSummary,
   completionImprovements,
+  decisionPending,
+  pendingRiskLevel,
+  pendingWarnings,
   tokenUsage,
   isAiReviewing,
+  onAccept,
+  onReject,
   onClose,
 }: AiReviewProgressDialogProps) {
   if (!open) return null;
@@ -76,12 +86,28 @@ export function AiReviewProgressDialog({
           {completed && !dialogError && (
             <div className="space-y-3 rounded-md border border-emerald-300/60 bg-emerald-50/70 px-3 py-3 text-xs dark:border-emerald-900/60 dark:bg-emerald-950/30">
               <div className="font-semibold text-emerald-700 dark:text-emerald-300">
-                {completionChanged
-                  ? "AI optimization applied"
-                  : "AI review completed (minimal edits)"}
+                {decisionPending
+                  ? "AI draft ready for your decision"
+                  : completionChanged
+                    ? "AI optimization applied"
+                    : "AI review completed (minimal edits)"}
               </div>
               {completionSummary && (
                 <div className="text-foreground/90">{completionSummary}</div>
+              )}
+              {decisionPending && (
+                <div className="rounded-md border border-amber-300/70 bg-amber-100/70 px-2.5 py-2 text-[11px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                  <div className="font-medium">
+                    Factual risk: {(pendingRiskLevel ?? "low").toUpperCase()}
+                  </div>
+                  {(pendingWarnings?.length ?? 0) > 0 && (
+                    <ul className="list-disc space-y-1 pl-4 pt-1">
+                      {pendingWarnings?.slice(0, 2).map((warning, idx) => (
+                        <li key={`${idx}-${warning}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
               {(completionImprovements?.length ?? 0) > 0 && (
                 <ul className="list-disc space-y-1 pl-4 text-foreground/80">
@@ -101,7 +127,16 @@ export function AiReviewProgressDialog({
             </div>
           )}
 
-          {(dialogError || completed) && (
+          {completed && !dialogError && decisionPending && (
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={onReject}>
+                Keep Original
+              </Button>
+              <Button onClick={onAccept}>Accept Changes</Button>
+            </div>
+          )}
+
+          {(dialogError || (completed && !decisionPending)) && (
             <div className="flex justify-end">
               <Button onClick={onClose}>Close</Button>
             </div>
