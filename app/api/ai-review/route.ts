@@ -19,7 +19,8 @@ CRITICAL RULES:
    - Convert implied lists (lines starting with "-", "*", "1.") into proper Markdown lists.
    - Fix broken paragraph indentation.
 3. CODE FENCING:
-   - Detect code snippets, logs, JSON, or configuration blocks.
+   - You MAY add a '>' in front of a paragraph ONLY when the quote structure is explicitly implied by formatting.
+   - Detect code snippets, logs, JSON, YAML, XML, shell output, or configuration blocks.
    - Wrap them in triple backticks (\`\`\`language) with the correct language tag.
    - If a code block is broken across lines, merge it back together.
 4. SAFETY:
@@ -29,16 +30,19 @@ CRITICAL RULES:
 Output ONLY the formatted Markdown.`;
 
 const REVIEWER_SYSTEM_PROMPT = `You are an expert Technical Editor-in-Chief.
-Analyze the provided Markdown content.
+You are reviewing Markdown content written by engineers for a professional audience.
+You do NOT rewrite the content yourself.
+
+Your responsibility is to ANALYZE and PLAN, not to edit.
 
 Your Task:
 1. Identify issues with Clarity, Flow, Tone Consistency, and Structure.
-2. Create a concrete execution plan for a Junior Editor to fix these issues.
+2. Produce a clear, actionable execution plan for a Junior Editor to fix these issues.
 
 Output Schema (JSON):
 {
   "review": "A single sentence summary of the strategic direction (e.g., 'Make it more professional and concise').",
-  "keyImprovements": ["3-5 specific bullet points of what looks bad"],
+  "keyImprovements": ["2-5 specific bullet points of what looks bad"],
   "rewritePlan": [
     "Step-by-step instructions for the editor.",
     "Example: 'Combine short sentences in the Intro section.'",
@@ -46,7 +50,10 @@ Output Schema (JSON):
   ]
 }
 
-Focus on high-impact changes. Do not nitpick if the meaning is already clear.`;
+PRIORITIZATION GUIDELINES:
+- Prefer structural fixes over sentence-level changes.
+- Prefer clarity and flow over tone polishing.
+- Avoid low-impact wording suggestions if meaning is already clear.`;
 
 const EDITOR_SYSTEM_PROMPT = `You are a Professional Markdown Editor.
 Your goal is to polish the content based on the Reviewer's plan while strictly preserving factual data.
