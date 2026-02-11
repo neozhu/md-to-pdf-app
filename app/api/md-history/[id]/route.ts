@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import type { MdHistoryDoc } from "@/lib/md-history";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
+import {
+  createSupabaseServerClient,
+  getAuthenticatedUserFromCookie,
+} from "@/lib/supabase/auth-server";
 
 export const runtime = "nodejs";
 
@@ -69,12 +72,17 @@ export async function PUT(
       return NextResponse.json({ error: "Doc id does not match route id." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServerClient();
+    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    if (!user || !accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const supabase = createSupabaseServerClient(accessToken);
 
     const { data, error } = await supabase
       .from(TABLE)
       .upsert({
         id: parsed.doc.id,
+        user_id: user.id,
         md_file_name: parsed.doc.mdFileName,
         markdown: parsed.doc.markdown,
         updated_at_ms: parsed.doc.updatedAt,
@@ -99,7 +107,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = getSupabaseServerClient();
+    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    if (!user || !accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const supabase = createSupabaseServerClient(accessToken);
 
     const { error } = await supabase
       .from(TABLE)

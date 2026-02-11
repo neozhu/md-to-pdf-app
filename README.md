@@ -28,7 +28,7 @@ When saving high-quality online content by copy/paste, heading hierarchy, lists,
 - High-quality PDF generation via Puppeteer (Chrome)
 - Adaptive AI review pipeline (formatter route or reviewer+editor route)
 - Live progress updates over SSE (`stage`, `result`, `error`)
-- Local document history, dark mode, responsive UI
+- Per-user document history with Supabase Auth + RLS, dark mode, responsive UI
 - Docker/Docker Compose deployment ready
 
 ## 🚀 Quick Start
@@ -102,6 +102,15 @@ OPENAI_API_KEY=
 # NEXT_PUBLIC_SUPABASE_URL=
 # NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 ```
+
+## Supabase Auth Setup
+
+1. In Supabase Auth, enable Email/Password provider.
+2. Run SQL from [`docs/supabase/md_history_docs.sql`](docs/supabase/md_history_docs.sql).
+3. Start the app and open `/login` to sign in.
+4. Optional: configure `NEXT_PUBLIC_APP_URL` so password reset emails use the correct callback domain.
+
+`/` is login-protected and history APIs are user-scoped via RLS.
 
 PDF styling is defined in [`app/api/pdf/route.ts`](app/api/pdf/route.ts).
 

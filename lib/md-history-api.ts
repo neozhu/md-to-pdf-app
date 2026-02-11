@@ -1,6 +1,13 @@
 import type { MdHistoryDoc } from "@/lib/md-history";
 
 async function readErrorMessage(res: Response) {
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      window.location.assign("/login");
+    }
+    return "Please sign in to continue.";
+  }
+
   try {
     const data = (await res.json()) as { error?: string; message?: string };
     return data.message ?? data.error ?? `Request failed (${res.status})`;
@@ -44,4 +51,3 @@ export async function deleteMdHistoryDoc(id: string) {
   });
   if (!res.ok) throw new Error(await readErrorMessage(res));
 }
-

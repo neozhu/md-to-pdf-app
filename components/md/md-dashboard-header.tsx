@@ -4,6 +4,7 @@ import {
   Download,
   Github,
   Loader2,
+  LogOut,
   Menu,
   Printer,
   WandSparkles,
@@ -29,6 +30,7 @@ type MdDashboardHeaderProps = {
   onDownload: () => void;
   onAiReview: () => void;
   onPrint: () => void;
+  onSignOut: () => void;
 };
 
 export function MdDashboardHeader({
@@ -45,6 +47,7 @@ export function MdDashboardHeader({
   onDownload,
   onAiReview,
   onPrint,
+  onSignOut,
 }: MdDashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-20 border-b bg-background/70 py-2 backdrop-blur">
@@ -218,6 +221,10 @@ export function MdDashboardHeader({
             >
               <Github className="size-4" />
             </a>
+          </Button>
+
+          <Button variant="outline" size="icon" onClick={onSignOut} aria-label="Sign out">
+            <LogOut className="size-4" />
           </Button>
 
           <ModeToggle />
