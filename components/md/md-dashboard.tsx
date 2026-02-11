@@ -407,6 +407,11 @@ export function MdDashboard() {
     }
   }
 
+  async function onSignOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
+
   const onAcceptAiChanges = React.useCallback(() => {
     if (!aiPendingDecision) return;
     didUserEditRef.current = true;
@@ -722,6 +727,7 @@ export function MdDashboard() {
           onDownload={onDownload}
           onAiReview={onAiReview}
           onPrint={onPrint}
+          onSignOut={onSignOut}
         />
 
         <div className="relative flex min-h-0 flex-1 px-4 pt-4 md:px-4 lg:pl-[280px]">

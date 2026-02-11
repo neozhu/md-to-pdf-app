@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import type { MdHistoryDoc } from "@/lib/md-history";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
+import {
+  createSupabaseServerClient,
+  getAuthenticatedUserFromCookie,
+} from "@/lib/supabase/auth-server";
 
 export const runtime = "nodejs";
 
@@ -55,7 +58,11 @@ function validateDoc(input: unknown) {
 
 export async function GET() {
   try {
-    const supabase = getSupabaseServerClient();
+    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    if (!user || !accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const supabase = createSupabaseServerClient(accessToken);
 
     const { data, error } = await supabase
       .from(TABLE)
@@ -83,12 +90,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const supabase = getSupabaseServerClient();
+    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    if (!user || !accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const supabase = createSupabaseServerClient(accessToken);
 
     const { data, error } = await supabase
       .from(TABLE)
       .insert({
         id: parsed.doc.id,
+        user_id: user.id,
         md_file_name: parsed.doc.mdFileName,
         markdown: parsed.doc.markdown,
         updated_at_ms: parsed.doc.updatedAt,
