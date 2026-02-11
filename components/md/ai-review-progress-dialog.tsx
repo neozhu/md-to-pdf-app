@@ -19,6 +19,7 @@ type AiReviewProgressDialogProps = {
   dialogMessage: string;
   completed: boolean;
   completionChanged: boolean;
+  completionSkipped?: boolean;
   completionSummary?: string;
   completionImprovements?: string[];
   decisionPending: boolean;
@@ -41,6 +42,7 @@ export function AiReviewProgressDialog({
   dialogMessage,
   completed,
   completionChanged,
+  completionSkipped,
   completionSummary,
   completionImprovements,
   decisionPending,
@@ -88,6 +90,8 @@ export function AiReviewProgressDialog({
               <div className="font-semibold text-emerald-700 dark:text-emerald-300">
                 {decisionPending
                   ? "AI draft ready for your decision"
+                  : completionSkipped
+                    ? "No edit needed"
                   : completionChanged
                     ? "AI optimization applied"
                     : "AI review completed (minimal edits)"}

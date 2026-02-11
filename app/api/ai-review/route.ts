@@ -52,6 +52,7 @@ CONSERVATIVE PLANNING POLICY (CRITICAL):
 
 Output Schema (JSON):
 {
+  "needsEdit": "boolean. true only when edits are genuinely necessary; false when content can be kept as-is.",
   "review": "A single sentence summary of the strategic direction (e.g., 'Make it more professional and concise').",
   "keyImprovements": ["2-5 specific bullet points of what looks bad"],
   "rewritePlan": [
@@ -66,7 +67,8 @@ PRIORITIZATION GUIDELINES:
 - Prefer structural fixes over sentence-level changes.
 - Prefer clarity and flow over tone polishing.
 - Avoid low-impact wording suggestions if meaning is already clear.
-- Keep rewritePlan concise and conservative (3-5 steps, each narrowly scoped).`;
+- Keep rewritePlan concise and conservative.
+- Set needsEdit=false when only cosmetic or optional tweaks remain.`;
 
 const EDITOR_SYSTEM_PROMPT = `You are a Professional Markdown Editor.
 Your goal is to polish the content based on the Reviewer's plan while strictly preserving factual data.
@@ -93,6 +95,7 @@ If a sentence is ambiguous, choose the interpretation that preserves the origina
 type WorkflowRoute = "BRANCH_A" | "BRANCH_B";
 
 type ReviewerResult = {
+  needsEdit: boolean;
   review: string;
   keyImprovements: string[];
   rewritePlan: string[];
@@ -121,6 +124,7 @@ type AiReviewPayload = {
   toolInsights: {
     workflowRoute: WorkflowRoute;
     structureRecoveryDetected: boolean;
+    editorSkipped: boolean;
     structureCues: string[];
     rawBlockCount: number;
     headingCandidateCount: number;
@@ -695,6 +699,7 @@ function toReviewerResult(value: unknown): ReviewerResult | null {
   if (!value || typeof value !== "object") return null;
   const parsed = value as Partial<ReviewerResult>;
   if (
+    typeof parsed.needsEdit !== "boolean" ||
     typeof parsed.review !== "string" ||
     !Array.isArray(parsed.keyImprovements) ||
     !Array.isArray(parsed.rewritePlan)
@@ -702,6 +707,7 @@ function toReviewerResult(value: unknown): ReviewerResult | null {
     return null;
   }
   return {
+    needsEdit: parsed.needsEdit,
     review: parsed.review,
     keyImprovements: parsed.keyImprovements.filter(
       (item): item is string => typeof item === "string" && item.trim().length > 0,
@@ -714,18 +720,16 @@ function toReviewerResult(value: unknown): ReviewerResult | null {
 
 function buildFallbackReviewerResult(): ReviewerResult {
   return {
+    needsEdit: false,
     review:
-      "Apply a moderate polish that improves clarity and flow while keeping structure and meaning stable.",
+      "No high-impact editorial issues detected; keep the original text with minimal intervention.",
     keyImprovements: [
-      "Some sentences can be tightened for clarity and readability.",
-      "Tone and phrasing can be made more consistent across sections.",
-      "Minor grammar and concision improvements can reduce friction.",
+      "No high-impact clarity or structure issues were confirmed.",
+      "Avoid unnecessary paraphrasing when meaning is already clear.",
+      "Preserve the original wording unless an obvious error is present.",
     ],
     rewritePlan: [
-      "Preserve existing heading/list order unless a change is essential for comprehension.",
-      "Rewrite long or ambiguous sentences into concise, clear alternatives without changing factual meaning.",
-      "Keep technical details, numbers, links, and versions intact.",
-      "Return polished markdown only, without commentary.",
+      "Skip editing unless a clear, high-impact issue is identified.",
     ],
   };
 }
@@ -808,7 +812,7 @@ function buildReviewerPrompt(params: {
 }) {
   const { markdown, structureSignals, rawBlocksResult, codeRecoveryResult } = params;
   return [
-    "Review the markdown and output JSON only (review/keyImprovements/rewritePlan).",
+    "Review the markdown and output JSON only (needsEdit/review/keyImprovements/rewritePlan).",
     "",
     "Precomputed Context:",
     `- Signals: unstructured=${structureSignals.isLikelyUnstructuredPlainText ? "yes" : "no"}, markdownSignals=${structureSignals.hasMarkdownSignals ? "yes" : "no"}, codeCueCount=${structureSignals.codeCueCount}`,
@@ -932,6 +936,7 @@ async function runDualAgentReview(params: {
   const workflow = resolveWorkflowContext(markdown);
   const reviewerUsage = emptyAgentTokenUsage();
   const editorUsage = emptyAgentTokenUsage();
+  let editorSkipped = false;
   let review = "";
   let keyImprovements: string[] = [];
   let polishedMarkdown = markdown;
@@ -988,21 +993,22 @@ async function runDualAgentReview(params: {
     const reviewerSchema = jsonSchema<ReviewerResult>({
       type: "object",
       properties: {
+        needsEdit: { type: "boolean" },
         review: { type: "string", minLength: 1 },
         keyImprovements: {
           type: "array",
           items: { type: "string" },
-          minItems: 3,
+          minItems: 0,
           maxItems: 5,
         },
         rewritePlan: {
           type: "array",
           items: { type: "string" },
-          minItems: 3,
+          minItems: 0,
           maxItems: 6,
         },
       },
-      required: ["review", "keyImprovements", "rewritePlan"],
+      required: ["needsEdit", "review", "keyImprovements", "rewritePlan"],
       additionalProperties: false,
     });
 
@@ -1040,33 +1046,43 @@ async function runDualAgentReview(params: {
       message: "Review pass complete.",
       usage: normalizeAgentTokenUsage(reviewerUsage),
     });
-    onStage?.({
-      agent: "editor",
-      status: "started",
-      message: "Editor Agent is polishing with factual constraints...",
-    });
+    if (!reviewerResult.needsEdit) {
+      editorSkipped = true;
+      onStage?.({
+        agent: "editor",
+        status: "completed",
+        message: "Reviewer determined no high-impact edits are needed. Editor step skipped.",
+        usage: normalizeAgentTokenUsage(editorUsage),
+      });
+    } else {
+      onStage?.({
+        agent: "editor",
+        status: "started",
+        message: "Editor Agent is polishing with factual constraints...",
+      });
 
-    const editorResult = await generateText({
-      model: openai(model),
-      abortSignal,
-      system: EDITOR_SYSTEM_PROMPT,
-      prompt: buildEditorPrompt({
-        markdown,
-        reviewerResult,
-        factualBaseline: workflow.factualBaseline,
-      }),
-      providerOptions: getOpenAIProviderOptions("editor"),
-    });
-    accumulateUsage(editorUsage, editorResult);
-    throwIfAborted();
+      const editorResult = await generateText({
+        model: openai(model),
+        abortSignal,
+        system: EDITOR_SYSTEM_PROMPT,
+        prompt: buildEditorPrompt({
+          markdown,
+          reviewerResult,
+          factualBaseline: workflow.factualBaseline,
+        }),
+        providerOptions: getOpenAIProviderOptions("editor"),
+      });
+      accumulateUsage(editorUsage, editorResult);
+      throwIfAborted();
 
-    polishedMarkdown = editorResult.text.trim() || markdown;
-    onStage?.({
-      agent: "editor",
-      status: "completed",
-      message: "Polish pass complete.",
-      usage: normalizeAgentTokenUsage(editorUsage),
-    });
+      polishedMarkdown = editorResult.text.trim() || markdown;
+      onStage?.({
+        agent: "editor",
+        status: "completed",
+        message: "Polish pass complete.",
+        usage: normalizeAgentTokenUsage(editorUsage),
+      });
+    }
   }
 
   if (!review) {
@@ -1099,6 +1115,7 @@ async function runDualAgentReview(params: {
     toolInsights: {
       workflowRoute: workflow.route,
       structureRecoveryDetected: workflow.route === "BRANCH_A",
+      editorSkipped,
       structureCues: workflow.structureSignals.cues,
       rawBlockCount: workflow.rawBlocksResult.blockCount,
       headingCandidateCount: workflow.rawBlocksResult.headingCandidateCount,

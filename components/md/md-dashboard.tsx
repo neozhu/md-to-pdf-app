@@ -32,6 +32,7 @@ import {
 type ViewMode = "split" | "editor" | "preview";
 type AiToolInsights = {
   structureRecoveryDetected?: boolean;
+  editorSkipped?: boolean;
   structureCues?: string[];
   rawBlockCount?: number;
   headingCandidateCount?: number;
@@ -221,6 +222,7 @@ export function MdDashboard() {
   const [aiTokenUsage, setAiTokenUsage] = React.useState<AiTokenUsage>({});
   const [aiCompleted, setAiCompleted] = React.useState(false);
   const [aiCompletionChanged, setAiCompletionChanged] = React.useState(false);
+  const [aiCompletionSkipped, setAiCompletionSkipped] = React.useState(false);
   const [aiCompletionSummary, setAiCompletionSummary] = React.useState("");
   const [aiCompletionImprovements, setAiCompletionImprovements] = React.useState<
     string[]
@@ -461,6 +463,7 @@ export function MdDashboard() {
     setAiTokenUsage({});
     setAiCompleted(false);
     setAiCompletionChanged(false);
+    setAiCompletionSkipped(false);
     setAiCompletionSummary("");
     setAiCompletionImprovements([]);
     setAiPendingDecision(null);
@@ -564,6 +567,9 @@ export function MdDashboard() {
       }
       setAiCompleted(true);
       setAiCompletionChanged(data.changed !== false);
+      setAiCompletionSkipped(
+        data.changed === false && data.toolInsights?.editorSkipped === true,
+      );
       setAiCompletionSummary(summary);
       setAiCompletionImprovements(
         Array.isArray(data.keyImprovements)
@@ -572,7 +578,9 @@ export function MdDashboard() {
       );
       setAiDialogMessage(
         data.changed === false
-          ? "No substantial rewrite suggested. You can close this window."
+          ? data.toolInsights?.editorSkipped
+            ? "Reviewer judged no high-impact edits are needed. You can close this window."
+            : "No substantial rewrite suggested. You can close this window."
           : "Review complete. Accept changes or keep original.",
       );
       setAiActiveAgent("editor");
@@ -827,6 +835,7 @@ export function MdDashboard() {
           dialogMessage={aiDialogMessage}
           completed={aiCompleted}
           completionChanged={aiCompletionChanged}
+          completionSkipped={aiCompletionSkipped}
           completionSummary={aiCompletionSummary}
           completionImprovements={aiCompletionImprovements}
           decisionPending={Boolean(aiPendingDecision)}
