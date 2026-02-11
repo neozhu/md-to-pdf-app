@@ -43,6 +43,13 @@ Your Task:
    - Structure: long paragraphs covering multiple ideas, unclear section boundaries, or places where H1 / H2 / H3 headings are clearly needed but missing.
 2. Produce a clear, actionable execution plan for a Junior Editor to fix these issues.
 
+CONSERVATIVE PLANNING POLICY (CRITICAL):
+- Minimize rewrite scope. Prefer micro-edits over sentence rewrites.
+- Prioritize obvious errors first: grammar, punctuation, clear ambiguity, and mild awkward phrasing.
+- Keep original meaning, terminology, order, and voice stable unless a change is clearly necessary.
+- Do not propose broad paraphrasing, stylistic overhaul, or aggressive tone rewriting.
+- If text is already acceptable, return a light-touch plan (small fixes only).
+
 Output Schema (JSON):
 {
   "review": "A single sentence summary of the strategic direction (e.g., 'Make it more professional and concise').",
@@ -58,7 +65,8 @@ Output Schema (JSON):
 PRIORITIZATION GUIDELINES:
 - Prefer structural fixes over sentence-level changes.
 - Prefer clarity and flow over tone polishing.
-- Avoid low-impact wording suggestions if meaning is already clear.`;
+- Avoid low-impact wording suggestions if meaning is already clear.
+- Keep rewritePlan concise and conservative (3-5 steps, each narrowly scoped).`;
 
 const EDITOR_SYSTEM_PROMPT = `You are a Professional Markdown Editor.
 Your goal is to polish the content based on the Reviewer's plan while strictly preserving factual data.
