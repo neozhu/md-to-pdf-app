@@ -49,6 +49,12 @@ CONSERVATIVE PLANNING POLICY (CRITICAL):
 - Keep original meaning, terminology, order, and voice stable unless a change is clearly necessary.
 - Do not propose broad paraphrasing, stylistic overhaul, or aggressive tone rewriting.
 - If text is already acceptable, return a light-touch plan (small fixes only).
+- Default to no-change. Set needsEdit=true only for objective, high-confidence issues.
+- Objective issues include:
+  1) clear grammar/spelling/punctuation errors,
+  2) wording ambiguity likely to cause implementation misunderstanding,
+  3) broken Markdown structure reducing readability.
+- If none of the above are present, set needsEdit=false.
 
 Output Schema (JSON):
 {
