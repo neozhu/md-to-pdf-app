@@ -66,6 +66,11 @@ export async function POST(req: Request) {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Serif SC", "Microsoft YaHei", sans-serif;
               page-break-after: avoid;
             }
+            .markdown-body h1,
+            .markdown-body h2 {
+              border-bottom: none !important;
+              padding-bottom: 0 !important;
+            }
             .markdown-body pre {
               page-break-inside: avoid;
             }

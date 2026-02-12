@@ -68,6 +68,12 @@ function buildPrintableHtml(contentHtml: string, title: string) {
         page-break-after: avoid;
       }
 
+      .markdown-body h1,
+      .markdown-body h2 {
+        border-bottom: none !important;
+        padding-bottom: 0 !important;
+      }
+
       .markdown-body pre,
       .markdown-body table {
         page-break-inside: avoid;
