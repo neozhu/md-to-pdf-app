@@ -71,6 +71,12 @@ export async function POST(req: Request) {
               border-bottom: none !important;
               padding-bottom: 0 !important;
             }
+            .markdown-body hr {
+              height: 0;
+              border: 0;
+              border-top: 1px solid #e4e4e7;
+              margin: 1.5rem 0;
+            }
             .markdown-body pre {
               page-break-inside: avoid;
             }
