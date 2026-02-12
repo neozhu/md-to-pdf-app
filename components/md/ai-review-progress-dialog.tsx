@@ -3,14 +3,10 @@
 import type { CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import type { AiAgentTokenUsage } from "@/lib/ai-review/types";
 
 export type AiAgent = "reviewer" | "editor" | null;
-export type AiAgentTokenUsage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  calls?: number;
-};
+export type { AiAgentTokenUsage };
 
 type AiReviewProgressDialogProps = {
   open: boolean;

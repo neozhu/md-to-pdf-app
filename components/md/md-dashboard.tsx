@@ -15,6 +15,11 @@ import {
   upsertMdHistoryDoc,
 } from "@/lib/md-history-api";
 import { printMarkdownLocally } from "@/lib/markdown/print";
+import type {
+  AiToolInsights,
+  AiTokenUsage,
+  AiReviewResponse,
+} from "@/lib/ai-review/types";
 import {
   AiReviewProgressDialog,
   type AiAgent,
@@ -30,31 +35,6 @@ import {
 } from "./use-md-history";
 
 type ViewMode = "split" | "editor" | "preview";
-type AiToolInsights = {
-  structureRecoveryDetected?: boolean;
-  editorSkipped?: boolean;
-  structureCues?: string[];
-  rawBlockCount?: number;
-  headingCandidateCount?: number;
-  listCandidateCount?: number;
-  codeCandidateCount?: number;
-  recoveredCodeBlockCount?: number;
-  factualRiskLevel?: "low" | "medium" | "high";
-  factualWarnings?: string[];
-};
-type AiTokenUsage = {
-  reviewer?: AiAgentTokenUsage;
-  editor?: AiAgentTokenUsage;
-};
-type AiReviewResponse = {
-  review?: string;
-  keyImprovements?: string[];
-  polishedMarkdown?: string;
-  changed?: boolean;
-  tokenUsage?: AiTokenUsage;
-  toolInsights?: AiToolInsights;
-  error?: string;
-};
 type AiPendingDecision = {
   polishedMarkdown: string;
   tokenSummary: string;
@@ -67,21 +47,22 @@ function formatToolInsights(insights?: AiToolInsights) {
   if (!insights) return "";
   const parts: string[] = [];
   if (insights.structureRecoveryDetected) {
-    parts.push("structure rebuild enabled");
-  }
-  if (typeof insights.rawBlockCount === "number") {
-    parts.push(
-      `blocks ${insights.rawBlockCount} (h${insights.headingCandidateCount ?? 0}/l${insights.listCandidateCount ?? 0}/c${insights.codeCandidateCount ?? 0})`,
-    );
+    parts.push("Mode: Structure Recovery");
   }
   if (
     typeof insights.recoveredCodeBlockCount === "number" &&
     insights.recoveredCodeBlockCount > 0
   ) {
-    parts.push(`code blocks recovered ${insights.recoveredCodeBlockCount}`);
+    parts.push(`${insights.recoveredCodeBlockCount} code block(s) recovered`);
   }
   if (insights.factualRiskLevel) {
-    parts.push(`factual risk ${insights.factualRiskLevel}`);
+    const label =
+      insights.factualRiskLevel === "low"
+        ? "Low"
+        : insights.factualRiskLevel === "medium"
+          ? "Medium"
+          : "High";
+    parts.push(`Factual risk: ${label}`);
   }
   const factualWarnings = insights.factualWarnings ?? [];
   if (factualWarnings.length > 0) {
@@ -102,13 +83,15 @@ function formatTokenUsageSummary(tokenUsage?: AiTokenUsage) {
   if (!tokenUsage) return "";
   const reviewer = resolveTotalTokens(tokenUsage.reviewer);
   const editor = resolveTotalTokens(tokenUsage.editor);
+  const total = reviewer + editor;
+  if (total === 0) return "";
   const parts: string[] = [];
-  if (reviewer > 0) parts.push(`review ${reviewer.toLocaleString()}`);
-  if (editor > 0) parts.push(`edit ${editor.toLocaleString()}`);
+  if (reviewer > 0) parts.push(`Review: ${reviewer.toLocaleString()}`);
+  if (editor > 0) parts.push(`Edit: ${editor.toLocaleString()}`);
   if (reviewer > 0 && editor > 0) {
-    parts.push(`total ${(reviewer + editor).toLocaleString()}`);
+    parts.push(`Total: ${total.toLocaleString()}`);
   }
-  return parts.length > 0 ? `tokens ${parts.join(" / ")}` : "";
+  return parts.join(" · ") + " tokens";
 }
 
 function WorkbenchHeader({ title }: { title: string }) {
