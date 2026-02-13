@@ -66,8 +66,11 @@ export function LoginForm({ nextPath }: LoginFormProps) {
     }
 
     if (data.needsEmailConfirmation) {
-      toast.message(data.message ?? "Please confirm your email.");
       setIsSubmitting(false);
+      const params = new URLSearchParams();
+      if (email) params.set("email", email);
+      if (redirectPath) params.set("next", redirectPath);
+      router.push(`/verify-email?${params.toString()}`);
       return;
     }
 

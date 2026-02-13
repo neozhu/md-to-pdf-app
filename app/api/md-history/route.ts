@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { MdHistoryDoc } from "@/lib/md-history";
 import {
+  applySessionCookies,
   createSupabaseServerClient,
   getAuthenticatedUserFromCookie,
 } from "@/lib/supabase/auth-server";
@@ -11,6 +12,20 @@ export const runtime = "nodejs";
 const TABLE = "md_history_docs";
 const MAX_MARKDOWN_LEN = 1_000_000;
 const MAX_FILE_NAME_LEN = 200;
+
+function withRefreshedSessionCookie(
+  res: NextResponse,
+  refreshedSession: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  } | null,
+) {
+  if (refreshedSession) {
+    applySessionCookies(res, refreshedSession);
+  }
+  return res;
+}
 
 function toDoc(row: {
   id: string;
@@ -58,7 +73,7 @@ function validateDoc(input: unknown) {
 
 export async function GET() {
   try {
-    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    const { user, accessToken, refreshedSession } = await getAuthenticatedUserFromCookie();
     if (!user || !accessToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -75,7 +90,10 @@ export async function GET() {
     }
 
     const docs = (data ?? []).map(toDoc);
-    return NextResponse.json({ docs } satisfies { docs: MdHistoryDoc[] });
+    return withRefreshedSessionCookie(
+      NextResponse.json({ docs } satisfies { docs: MdHistoryDoc[] }),
+      refreshedSession,
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -90,7 +108,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    const { user, accessToken, refreshedSession } = await getAuthenticatedUserFromCookie();
     if (!user || !accessToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -113,7 +131,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status });
     }
 
-    return NextResponse.json({ doc: toDoc(data) } satisfies { doc: MdHistoryDoc }, { status: 201 });
+    return withRefreshedSessionCookie(
+      NextResponse.json(
+        { doc: toDoc(data) } satisfies { doc: MdHistoryDoc },
+        { status: 201 },
+      ),
+      refreshedSession,
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

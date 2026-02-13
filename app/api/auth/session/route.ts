@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
-  ACCESS_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE,
+  applySessionCookies,
   createSupabaseServerClient,
 } from "@/lib/supabase/auth-server";
 
@@ -13,29 +12,6 @@ type SessionRequest = {
 };
 
 export const runtime = "nodejs";
-
-function applySessionCookies(
-  res: NextResponse,
-  session: { access_token: string; refresh_token: string; expires_in: number },
-) {
-  const isProd = process.env.NODE_ENV === "production";
-  const maxAge = Number.isFinite(session.expires_in) ? session.expires_in : 3600;
-
-  res.cookies.set(ACCESS_TOKEN_COOKIE, session.access_token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    path: "/",
-    maxAge,
-  });
-  res.cookies.set(REFRESH_TOKEN_COOKIE, session.refresh_token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-}
 
 export async function POST(req: Request) {
   try {

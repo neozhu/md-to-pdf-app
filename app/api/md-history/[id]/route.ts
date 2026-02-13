@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { MdHistoryDoc } from "@/lib/md-history";
 import {
+  applySessionCookies,
   createSupabaseServerClient,
   getAuthenticatedUserFromCookie,
 } from "@/lib/supabase/auth-server";
@@ -11,6 +12,20 @@ export const runtime = "nodejs";
 const TABLE = "md_history_docs";
 const MAX_MARKDOWN_LEN = 1_000_000;
 const MAX_FILE_NAME_LEN = 200;
+
+function withRefreshedSessionCookie(
+  res: NextResponse,
+  refreshedSession: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  } | null,
+) {
+  if (refreshedSession) {
+    applySessionCookies(res, refreshedSession);
+  }
+  return res;
+}
 
 function toDoc(row: {
   id: string;
@@ -72,7 +87,7 @@ export async function PUT(
       return NextResponse.json({ error: "Doc id does not match route id." }, { status: 400 });
     }
 
-    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    const { user, accessToken, refreshedSession } = await getAuthenticatedUserFromCookie();
     if (!user || !accessToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -94,7 +109,10 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ doc: toDoc(data) } satisfies { doc: MdHistoryDoc });
+    return withRefreshedSessionCookie(
+      NextResponse.json({ doc: toDoc(data) } satisfies { doc: MdHistoryDoc }),
+      refreshedSession,
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -107,7 +125,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { user, accessToken } = await getAuthenticatedUserFromCookie();
+    const { user, accessToken, refreshedSession } = await getAuthenticatedUserFromCookie();
     if (!user || !accessToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -122,7 +140,10 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return new NextResponse(null, { status: 204 });
+    return withRefreshedSessionCookie(
+      new NextResponse(null, { status: 204 }),
+      refreshedSession,
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
