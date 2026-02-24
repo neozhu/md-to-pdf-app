@@ -13,6 +13,7 @@ const fsSource = `
   precision highp float;
   uniform vec2 iResolution;
   uniform float iTime;
+  uniform float iLightMode;
 
   const float overallSpeed = 0.2;
   const float gridSmoothWidth = 0.015;
@@ -23,7 +24,8 @@ const fsSource = `
   const float minorLineFrequency = 1.0;
   const vec4 gridColor = vec4(0.5);
   const float scale = 5.0;
-  const vec4 lineColor = vec4(0.4, 0.2, 0.8, 1.0);
+  const vec4 darkLineColor = vec4(0.4, 0.2, 0.8, 1.0);
+  const vec4 lightLineColor = vec4(0.22, 0.44, 0.86, 1.0);
   const float minLineWidth = 0.01;
   const float maxLineWidth = 0.2;
   const float lineSpeed = 1.0 * overallSpeed;
@@ -74,8 +76,13 @@ const fsSource = `
     space.x += random(space.y * warpFrequency + iTime * warpSpeed + 2.0) * warpAmplitude * horizontalFade;
 
     vec4 lines = vec4(0.0);
-    vec4 bgColor1 = vec4(0.1, 0.1, 0.3, 1.0);
-    vec4 bgColor2 = vec4(0.3, 0.1, 0.5, 1.0);
+    vec4 darkBgColor1 = vec4(0.1, 0.1, 0.3, 1.0);
+    vec4 darkBgColor2 = vec4(0.3, 0.1, 0.5, 1.0);
+    vec4 lightBgColor1 = vec4(0.79, 0.89, 1.0, 1.0);
+    vec4 lightBgColor2 = vec4(0.91, 0.84, 0.99, 1.0);
+    vec4 bgColor1 = mix(darkBgColor1, lightBgColor1, iLightMode);
+    vec4 bgColor2 = mix(darkBgColor2, lightBgColor2, iLightMode);
+    vec4 lineColor = mix(darkLineColor, lightLineColor, iLightMode);
 
     for(int l = 0; l < linesPerGroup; l++) {
       float normalizedLineIndex = float(l) / float(linesPerGroup);
@@ -175,6 +182,9 @@ const ShaderBackground = () => {
     const vertexPosition = gl.getAttribLocation(shaderProgram, "aVertexPosition");
     const resolution = gl.getUniformLocation(shaderProgram, "iResolution");
     const time = gl.getUniformLocation(shaderProgram, "iTime");
+    const lightMode = gl.getUniformLocation(shaderProgram, "iLightMode");
+    const root = document.documentElement;
+    let isLightMode = !root.classList.contains("dark");
 
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
@@ -187,6 +197,13 @@ const ShaderBackground = () => {
 
     const startTime = Date.now();
     let frameId = 0;
+    const themeObserver = new MutationObserver(() => {
+      isLightMode = !root.classList.contains("dark");
+    });
+    themeObserver.observe(root, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
 
     const render = () => {
       const currentTime = (Date.now() - startTime) / 1000;
@@ -197,6 +214,7 @@ const ShaderBackground = () => {
 
       if (resolution) gl.uniform2f(resolution, canvas.width, canvas.height);
       if (time) gl.uniform1f(time, currentTime);
+      if (lightMode) gl.uniform1f(lightMode, isLightMode ? 1 : 0);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
       gl.vertexAttribPointer(vertexPosition, 2, gl.FLOAT, false, 0, 0);
@@ -210,6 +228,7 @@ const ShaderBackground = () => {
 
     return () => {
       cancelAnimationFrame(frameId);
+      themeObserver.disconnect();
       window.removeEventListener("resize", resizeCanvas);
     };
   }, []);
@@ -224,4 +243,3 @@ const ShaderBackground = () => {
 };
 
 export default ShaderBackground;
-

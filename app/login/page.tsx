@@ -16,9 +16,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { next } = await searchParams;
 
   return (
-    <main className="relative min-h-dvh overflow-hidden px-4 py-10">
+    <main className="relative flex min-h-dvh items-center overflow-hidden px-4 py-10">
       <ShaderBackground />
-      <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 bg-white/18 backdrop-blur-[0.5px] dark:bg-background/55 dark:backdrop-blur-[1px]" />
       <div className="relative mx-auto w-full max-w-md">
         <LoginForm nextPath={next} />
       </div>

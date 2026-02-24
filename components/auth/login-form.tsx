@@ -81,7 +81,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   }
 
   return (
-    <Card className="rounded-xl border p-6 shadow-none">
+    <Card className="rounded-xl border-border/60 bg-card/65 p-6 shadow-xl shadow-black/5 backdrop-blur-md dark:bg-card/70">
       <div className="mb-6">
         <div className="mb-4 grid grid-cols-2 rounded-md border bg-muted/40 p-1">
           <button
