@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
+  isUntitledMdFileName,
+  mdFileNameFromPdfFileName,
+} from "@/lib/document-filename";
+import {
   createMdHistoryDoc,
   deleteMdHistoryDoc,
   listMdHistoryDocs,
@@ -140,6 +144,7 @@ export function MdDashboard() {
   const emptyDocs = React.useMemo(() => [], []);
   const history = useMdHistory(emptyDocs);
   const didUserEditRef = React.useRef(false);
+  const autoRenameAttemptedDocIdsRef = React.useRef(new Set<string>());
   const hydrateRef = React.useRef(history.hydrate);
   hydrateRef.current = history.hydrate;
 
@@ -154,6 +159,32 @@ export function MdDashboard() {
     setMarkdownText(value);
   }, []);
   const [viewMode, setViewMode] = React.useState<ViewMode>("split");
+  const requestFilenameSuggestion = React.useCallback(
+    async (markdown: string, signal?: AbortSignal) => {
+      const res = await fetch("/api/filename-suggestion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown }),
+        signal,
+      });
+
+      if (!res.ok) {
+        const fallback = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          fallback.error ?? `Filename suggestion failed (${res.status})`,
+        );
+      }
+
+      const data = (await res.json()) as { fileName?: unknown };
+      if (typeof data.fileName !== "string" || !data.fileName.trim()) {
+        throw new Error("Filename suggestion response was invalid.");
+      }
+      return data.fileName;
+    },
+    [],
+  );
 
   // Auto-save after user stops typing
   React.useEffect(() => {
@@ -179,6 +210,32 @@ export function MdDashboard() {
       // Save to database
       try {
         await upsertMdHistoryDoc(updatedDoc);
+        if (
+          isUntitledMdFileName(updatedDoc.mdFileName) &&
+          markdownText.trim().length >= 20 &&
+          !autoRenameAttemptedDocIdsRef.current.has(updatedDoc.id)
+        ) {
+          autoRenameAttemptedDocIdsRef.current.add(updatedDoc.id);
+          try {
+            const suggestedPdfFileName =
+              await requestFilenameSuggestion(markdownText);
+            const suggestedMdFileName =
+              mdFileNameFromPdfFileName(suggestedPdfFileName);
+
+            if (suggestedMdFileName !== updatedDoc.mdFileName) {
+              const renamedDoc = {
+                ...updatedDoc,
+                mdFileName: suggestedMdFileName,
+                updatedAt: Date.now(),
+              };
+              history.updateDoc(renamedDoc);
+              setFileName(suggestedPdfFileName);
+              await upsertMdHistoryDoc(renamedDoc);
+            }
+          } catch (error) {
+            console.warn("[md-dashboard] Auto filename suggestion failed:", error);
+          }
+        }
         // Show subtle success toast
         toast.success("Saved", {
           duration: 1000,
@@ -191,7 +248,7 @@ export function MdDashboard() {
     }, 1500); // Auto-save after 1.5 seconds of inactivity
 
     return () => clearTimeout(timeoutId);
-  }, [markdownText, history]);
+  }, [markdownText, history, requestFilenameSuggestion]);
   const [fileName, setFileName] = React.useState(() =>
     mdFileNameToPdfFileName(history.activeDoc.mdFileName),
   );

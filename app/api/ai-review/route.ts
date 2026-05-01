@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createOpenAI } from "@ai-sdk/openai";
 import { runDualAgentReview } from "@/lib/ai-review";
+import { DEFAULT_AI_REVIEW_MODEL } from "@/lib/openai-models";
 
 export const runtime = "nodejs";
 
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const model = process.env.OPENAI_MODEL ?? "gpt-5-mini";
+    const model = process.env.OPENAI_MODEL ?? DEFAULT_AI_REVIEW_MODEL;
     const baseUrl = process.env.OPENAI_BASE_URL;
     const openai = createOpenAI({
       apiKey,
