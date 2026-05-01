@@ -10,7 +10,7 @@ import {
 
 export const runtime = "nodejs";
 
-const MAX_MARKDOWN_LEN = 20_000;
+const MAX_FILENAME_SUGGESTION_MARKDOWN_LEN = 500;
 
 export async function POST(req: Request) {
   try {
@@ -25,7 +25,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const input = markdown.trim().slice(0, MAX_MARKDOWN_LEN);
+    const input = markdown
+      .trim()
+      .slice(0, MAX_FILENAME_SUGGESTION_MARKDOWN_LEN);
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
