@@ -10,7 +10,7 @@ A Next.js 16 app to edit Markdown, run adaptive AI review, and export clean PDFs
 ![Next.js](https://img.shields.io/badge/Next.js-16.1-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 
-![](docs/image.png)
+![MD to PDF app community preview](docs/image.png)
 
 ## Why I Built This App
 
