@@ -1,8 +1,8 @@
 # Stage 1: Dependencies
-FROM node:20-slim AS deps
+FROM node:22-slim AS deps
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -13,10 +13,10 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Stage 2: Builder
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm run build
 
 # Stage 3: Runner
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 
 # Install Chrome dependencies for Puppeteer
 RUN apt-get update && apt-get install -y \
