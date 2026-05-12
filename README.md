@@ -26,6 +26,7 @@ When saving high-quality online content by copy/paste, heading hierarchy, lists,
 
 - Live split editor + preview with GFM support and syntax highlighting
 - High-quality PDF generation via Puppeteer (Chrome)
+- **Copy to clipboard for OneNote** — one-click copy with inline-styled HTML so content pastes into OneNote (and Word/Outlook) with full formatting preserved
 - Adaptive AI review pipeline (formatter route or reviewer+editor route)
 - Live progress updates over SSE (`stage`, `result`, `error`)
 - Per-user document history with Supabase Auth + RLS, dark mode, responsive UI
@@ -80,7 +81,11 @@ md-to-pdf-app/
 │   ├── api/pdf/            # PDF generation API
 │   └── page.tsx            # Main UI entry
 ├── components/md/          # Editor/preview/dashboard
-├── lib/                    # Utilities
+├── lib/
+│   └── markdown/
+│       ├── copy-html.ts    # OneNote-friendly clipboard copy (inline-styled HTML)
+│       ├── print.ts        # Browser print helper
+│       └── render.ts       # Markdown → sanitized HTML
 ├── docs/                   # Docs and SQL setup notes
 └── DOCKER_DEPLOYMENT.md    # Detailed Docker guide
 ```

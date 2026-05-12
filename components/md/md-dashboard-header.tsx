@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ClipboardCopy,
   Download,
   Github,
   Loader2,
@@ -27,7 +28,9 @@ type MdDashboardHeaderProps = {
   canExport: boolean;
   exportingAction: "download" | "print" | null;
   isAiReviewing: boolean;
+  isCopying: boolean;
   onDownload: () => void;
+  onCopyForOneNote: () => void;
   onAiReview: () => void;
   onPrint: () => void;
   onSignOut: () => void;
@@ -44,7 +47,9 @@ export function MdDashboardHeader({
   canExport,
   exportingAction,
   isAiReviewing,
+  isCopying,
   onDownload,
+  onCopyForOneNote,
   onAiReview,
   onPrint,
   onSignOut,
@@ -153,6 +158,34 @@ export function MdDashboardHeader({
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Download className="size-4" />
+            )}
+          </Button>
+
+          <Button
+            variant="secondary"
+            disabled={isBusy || !canExport || isCopying}
+            onClick={onCopyForOneNote}
+            className="hidden sm:inline-flex"
+          >
+            {isCopying ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ClipboardCopy className="size-4" />
+            )}
+            Copy
+          </Button>
+          <Button
+            variant="secondary"
+            size="icon"
+            disabled={isBusy || !canExport || isCopying}
+            onClick={onCopyForOneNote}
+            className="sm:hidden"
+            aria-label="Copy for OneNote"
+          >
+            {isCopying ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ClipboardCopy className="size-4" />
             )}
           </Button>
 

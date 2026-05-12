@@ -19,6 +19,10 @@ import {
   upsertMdHistoryDoc,
 } from "@/lib/md-history-api";
 import { printMarkdownLocally } from "@/lib/markdown/print";
+import {
+  renderMarkdownForOneNote,
+  copyHtmlToClipboard,
+} from "@/lib/markdown/copy-html";
 import type {
   AiToolInsights,
   AiTokenUsage,
@@ -255,6 +259,7 @@ export function MdDashboard() {
   const [exportingAction, setExportingAction] = React.useState<
     "download" | "print" | null
   >(null);
+  const [isCopying, setIsCopying] = React.useState(false);
   const [isAiReviewing, setIsAiReviewing] = React.useState(false);
   const [aiActiveAgent, setAiActiveAgent] = React.useState<AiAgent>(null);
   const [aiDialogMessage, setAiDialogMessage] = React.useState("");
@@ -452,6 +457,27 @@ export function MdDashboard() {
   async function onSignOut() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
+  }
+
+  async function onCopyForOneNote() {
+    if (!markdownText.trim()) {
+      toast.error("Please write some Markdown first.");
+      return;
+    }
+    setIsCopying(true);
+    try {
+      const html = renderMarkdownForOneNote(markdownText);
+      await copyHtmlToClipboard(html);
+      toast.success("Copied! Paste into OneNote to see formatted content.", {
+        duration: 3000,
+      });
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to copy to clipboard.",
+      );
+    } finally {
+      setIsCopying(false);
+    }
   }
 
   const onAcceptAiChanges = React.useCallback(() => {
@@ -772,7 +798,9 @@ export function MdDashboard() {
           canExport={canExport}
           exportingAction={exportingAction}
           isAiReviewing={isAiReviewing}
+          isCopying={isCopying}
           onDownload={onDownload}
+          onCopyForOneNote={onCopyForOneNote}
           onAiReview={onAiReview}
           onPrint={onPrint}
           onSignOut={onSignOut}
