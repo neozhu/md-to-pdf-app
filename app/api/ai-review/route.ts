@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createOpenAI } from "@ai-sdk/openai";
-import { runDualAgentReview } from "@/lib/ai-review";
+import { runDualAgentReview, runPolishPass, runReviewPass } from "@/lib/ai-review";
 import { DEFAULT_AI_REVIEW_MODEL } from "@/lib/openai-models";
 
 export const runtime = "nodejs";
@@ -25,8 +25,10 @@ function resolveMaxInputTokens() {
 
 export async function POST(req: Request) {
   try {
-    const { markdown } = (await req.json().catch(() => ({}))) as {
+    const { markdown, mode, review } = (await req.json().catch(() => ({}))) as {
       markdown?: unknown;
+      mode?: unknown;
+      review?: unknown;
     };
 
     if (typeof markdown !== "string" || !markdown.trim()) {
@@ -72,13 +74,43 @@ export async function POST(req: Request) {
       req.headers.get("accept")?.includes("text/event-stream") ||
       new URL(req.url).searchParams.get("stream") === "1";
 
-    if (!wantsStream) {
-      const result = await runDualAgentReview({
+    const runSelectedMode = (options?: {
+      onStage?: Parameters<typeof runDualAgentReview>[0]["onStage"];
+      abortSignal?: AbortSignal;
+    }) => {
+      if (mode === "review") {
+        return runReviewPass({
+          markdown,
+          model,
+          openai,
+          onStage: options?.onStage,
+          abortSignal: options?.abortSignal,
+        });
+      }
+      if (mode === "polish") {
+        if (typeof review !== "string" || !review.trim()) {
+          throw new Error("Missing review instructions for polish pass.");
+        }
+        return runPolishPass({
+          markdown,
+          userApprovedReview: review,
+          model,
+          openai,
+          onStage: options?.onStage,
+          abortSignal: options?.abortSignal,
+        });
+      }
+      return runDualAgentReview({
         markdown,
         model,
         openai,
-        abortSignal: req.signal,
+        onStage: options?.onStage,
+        abortSignal: options?.abortSignal,
       });
+    };
+
+    if (!wantsStream) {
+      const result = await runSelectedMode({ abortSignal: req.signal });
       return NextResponse.json(result);
     }
 
@@ -111,10 +143,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream<Uint8Array>({
       start: async (controller) => {
         try {
-          const result = await runDualAgentReview({
-            markdown,
-            model,
-            openai,
+          const result = await runSelectedMode({
             onStage: (stage) => sendEvent(controller, "stage", stage),
             abortSignal: streamAbortController.signal,
           });

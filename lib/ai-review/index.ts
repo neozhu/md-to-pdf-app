@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 // Core orchestration
-export { runDualAgentReview } from "./orchestration";
+export { runDualAgentReview, runPolishPass, runReviewPass } from "./orchestration";
 
 // Types (re-export everything for convenience)
 export type {

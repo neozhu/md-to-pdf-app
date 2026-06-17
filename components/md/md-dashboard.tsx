@@ -47,8 +47,6 @@ type AiPendingDecision = {
   polishedMarkdown: string;
   tokenSummary: string;
   insightSummary: string;
-  factualRiskLevel?: "low" | "medium" | "high";
-  factualWarnings: string[];
 };
 
 function formatToolInsights(insights?: AiToolInsights) {
@@ -62,19 +60,6 @@ function formatToolInsights(insights?: AiToolInsights) {
     insights.recoveredCodeBlockCount > 0
   ) {
     parts.push(`${insights.recoveredCodeBlockCount} code block(s) recovered`);
-  }
-  if (insights.factualRiskLevel) {
-    const label =
-      insights.factualRiskLevel === "low"
-        ? "Low"
-        : insights.factualRiskLevel === "medium"
-          ? "Medium"
-          : "High";
-    parts.push(`Factual risk: ${label}`);
-  }
-  const factualWarnings = insights.factualWarnings ?? [];
-  if (factualWarnings.length > 0) {
-    parts.push(factualWarnings[0]);
   }
   return parts.join(" · ");
 }
@@ -272,6 +257,7 @@ export function MdDashboard() {
   const [aiCompletionImprovements, setAiCompletionImprovements] = React.useState<
     string[]
   >([]);
+  const [aiEditableReview, setAiEditableReview] = React.useState("");
   const [aiPendingDecision, setAiPendingDecision] = React.useState<
     AiPendingDecision | null
   >(null);
@@ -495,6 +481,7 @@ export function MdDashboard() {
       duration: 4500,
     });
     setAiDialogMessage("Changes applied.");
+    setAiEditableReview("");
     setAiPendingDecision(null);
     setIsAiDialogOpen(false);
   }, [aiPendingDecision]);
@@ -511,9 +498,99 @@ export function MdDashboard() {
       duration: 4000,
     });
     setAiDialogMessage("Original markdown kept.");
+    setAiEditableReview("");
     setAiPendingDecision(null);
     setIsAiDialogOpen(false);
   }, [aiPendingDecision]);
+
+  async function requestAiReviewStream(body: {
+    mode: "review" | "polish";
+    markdown: string;
+    review?: string;
+  }) {
+    const res = await fetch("/api/ai-review?stream=1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const fallback = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new Error(fallback.error ?? `AI review failed (${res.status})`);
+    }
+
+    if (!res.body) {
+      throw new Error("Empty AI response stream.");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: AiReviewResponse | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() ?? "";
+
+      for (const chunk of chunks) {
+        const lines = chunk
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+        if (lines.length === 0) continue;
+
+        const eventLine = lines.find((line) => line.startsWith("event:"));
+        const dataLine = lines.find((line) => line.startsWith("data:"));
+        if (!eventLine || !dataLine) continue;
+
+        const event = eventLine.slice("event:".length).trim();
+        const dataText = dataLine.slice("data:".length).trim();
+        let payload: unknown;
+        try {
+          payload = JSON.parse(dataText);
+        } catch {
+          continue;
+        }
+
+        if (event === "stage") {
+          const stage = payload as {
+            agent?: AiAgent;
+            message?: string;
+            status?: "started" | "completed";
+            usage?: AiAgentTokenUsage;
+          };
+          if (stage.agent === "reviewer" || stage.agent === "editor") {
+            setAiActiveAgent(stage.agent);
+            if (stage.usage) {
+              setAiTokenUsage((prev) => ({
+                ...prev,
+                [stage.agent as "reviewer" | "editor"]: stage.usage,
+              }));
+            }
+          }
+          if (stage.message) {
+            setAiDialogMessage(stage.message);
+          }
+        } else if (event === "result") {
+          finalResult = payload as AiReviewResponse;
+        } else if (event === "error") {
+          const err = payload as { message?: string };
+          throw new Error(err.message || "AI review failed.");
+        }
+      }
+    }
+
+    return finalResult ?? {};
+  }
 
   async function onAiReview() {
     if (!markdownText.trim()) {
@@ -532,94 +609,14 @@ export function MdDashboard() {
     setAiCompletionSkipped(false);
     setAiCompletionSummary("");
     setAiCompletionImprovements([]);
+    setAiEditableReview("");
     setAiPendingDecision(null);
 
     try {
-      const res = await fetch("/api/ai-review?stream=1", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-        },
-        body: JSON.stringify({ markdown: markdownText }),
+      const data = await requestAiReviewStream({
+        mode: "review",
+        markdown: markdownText,
       });
-
-      if (!res.ok) {
-        const fallback = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(fallback.error ?? `AI review failed (${res.status})`);
-      }
-
-      if (!res.body) {
-        throw new Error("Empty AI response stream.");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalResult: AiReviewResponse | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() ?? "";
-
-        for (const chunk of chunks) {
-          const lines = chunk
-            .split("\n")
-            .map((line) => line.trim())
-            .filter(Boolean);
-          if (lines.length === 0) continue;
-
-          const eventLine = lines.find((line) => line.startsWith("event:"));
-          const dataLine = lines.find((line) => line.startsWith("data:"));
-          if (!eventLine || !dataLine) continue;
-
-          const event = eventLine.slice("event:".length).trim();
-          const dataText = dataLine.slice("data:".length).trim();
-          let payload: unknown;
-          try {
-            payload = JSON.parse(dataText);
-          } catch {
-            continue;
-          }
-
-          if (event === "stage") {
-            const stage = payload as {
-              agent?: AiAgent;
-              message?: string;
-              status?: "started" | "completed";
-              usage?: AiAgentTokenUsage;
-            };
-            if (stage.agent === "reviewer" || stage.agent === "editor") {
-              setAiActiveAgent(stage.agent);
-              if (stage.usage) {
-                setAiTokenUsage((prev) => ({
-                  ...prev,
-                  [stage.agent as "reviewer" | "editor"]: stage.usage,
-                }));
-              }
-            }
-            if (stage.message) {
-              setAiDialogMessage(stage.message);
-            }
-          } else if (event === "result") {
-            finalResult = payload as AiReviewResponse;
-          } else if (event === "error") {
-            const err = payload as { message?: string };
-            throw new Error(err.message || "AI review failed.");
-          }
-        }
-      }
-
-      const data = finalResult ?? {};
-      if (!data.polishedMarkdown || typeof data.polishedMarkdown !== "string") {
-        throw new Error("AI response missing polished markdown.");
-      }
 
       const summary = data.review?.trim() || "Document polished by AI editor.";
       const tokenSummary = formatTokenUsageSummary(data.tokenUsage ?? aiTokenUsage);
@@ -632,11 +629,83 @@ export function MdDashboard() {
         setAiTokenUsage(data.tokenUsage);
       }
       setAiCompleted(true);
-      setAiCompletionChanged(data.changed !== false);
-      setAiCompletionSkipped(
-        data.changed === false && data.toolInsights?.editorSkipped === true,
-      );
+      setAiCompletionChanged(false);
+      setAiCompletionSkipped(false);
       setAiCompletionSummary(summary);
+      setAiCompletionImprovements(
+        Array.isArray(data.keyImprovements)
+          ? data.keyImprovements.slice(0, 3)
+          : [],
+      );
+      setAiEditableReview(
+        data.editableReview?.trim() ||
+          summary ||
+          "No high-impact edits were identified.",
+      );
+      setAiDialogMessage("Review complete. Edit the suggestions, then choose whether AI should polish.");
+      setAiActiveAgent("reviewer");
+      setAiPendingDecision(null);
+      toast.message("AI review ready", {
+        description: reviewDescription || "Review suggestions generated.",
+        duration: 4000,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "AI review failed.";
+      setAiDialogError(message);
+      setAiDialogMessage("Execution stopped due to an error.");
+      setAiPendingDecision(null);
+      toast.error(message);
+    } finally {
+      setIsAiReviewing(false);
+    }
+  }
+
+  async function onPolishFromReview() {
+    if (!aiEditableReview.trim()) {
+      toast.error("Please keep or write review suggestions before polishing.");
+      return;
+    }
+
+    setIsAiReviewing(true);
+    setAiDialogError(null);
+    setAiCompleted(false);
+    setAiCompletionChanged(false);
+    setAiCompletionSkipped(false);
+    setAiCompletionSummary("");
+    setAiCompletionImprovements([]);
+    setAiPendingDecision(null);
+    setAiActiveAgent("editor");
+    setAiDialogMessage("Editor Agent is preparing your approved review...");
+
+    try {
+      const data = await requestAiReviewStream({
+        mode: "polish",
+        markdown: markdownText,
+        review: aiEditableReview,
+      });
+
+      if (!data.polishedMarkdown || typeof data.polishedMarkdown !== "string") {
+        throw new Error("AI response missing polished markdown.");
+      }
+
+      const summary = data.review?.trim() || "Document polished by AI editor.";
+      const tokenSummary = formatTokenUsageSummary(data.tokenUsage ?? aiTokenUsage);
+      const insightSummary = formatToolInsights(data.toolInsights);
+      const reviewDescription = [tokenSummary, insightSummary]
+        .filter(Boolean)
+        .join(" · ");
+
+      if (data.tokenUsage) {
+        setAiTokenUsage((prev) => ({
+          reviewer: prev.reviewer ?? data.tokenUsage?.reviewer,
+          editor: data.tokenUsage?.editor,
+        }));
+      }
+      setAiCompleted(true);
+      setAiCompletionChanged(data.changed !== false);
+      setAiCompletionSkipped(false);
+      setAiCompletionSummary(summary);
+      setAiEditableReview("");
       setAiCompletionImprovements(
         Array.isArray(data.keyImprovements)
           ? data.keyImprovements.slice(0, 3)
@@ -644,17 +713,15 @@ export function MdDashboard() {
       );
       setAiDialogMessage(
         data.changed === false
-          ? data.toolInsights?.editorSkipped
-            ? "Reviewer judged no high-impact edits are needed. You can close this window."
-            : "No substantial rewrite suggested. You can close this window."
-          : "Review complete. Accept changes or keep original.",
+          ? "No substantial rewrite was produced. You can close this window."
+          : "Polish complete. Accept changes or keep original.",
       );
       setAiActiveAgent("editor");
 
       if (data.changed === false) {
         setAiPendingDecision(null);
-        toast.message("AI review completed", {
-          description: reviewDescription || "No token usage reported.",
+        toast.message("AI polish completed", {
+          description: reviewDescription || "No changes applied.",
           duration: 4000,
         });
       } else {
@@ -662,12 +729,10 @@ export function MdDashboard() {
           polishedMarkdown: data.polishedMarkdown,
           tokenSummary,
           insightSummary,
-          factualRiskLevel: data.toolInsights?.factualRiskLevel,
-          factualWarnings: data.toolInsights?.factualWarnings ?? [],
         });
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "AI review failed.";
+      const message = e instanceof Error ? e.message : "AI polish failed.";
       setAiDialogError(message);
       setAiDialogMessage("Execution stopped due to an error.");
       setAiPendingDecision(null);
@@ -906,14 +971,16 @@ export function MdDashboard() {
           completionSkipped={aiCompletionSkipped}
           completionSummary={aiCompletionSummary}
           completionImprovements={aiCompletionImprovements}
+          editableReview={aiEditableReview}
           decisionPending={Boolean(aiPendingDecision)}
-          pendingRiskLevel={aiPendingDecision?.factualRiskLevel}
-          pendingWarnings={aiPendingDecision?.factualWarnings}
           tokenUsage={aiTokenUsage}
           isAiReviewing={isAiReviewing}
+          onEditableReviewChange={setAiEditableReview}
+          onPolish={onPolishFromReview}
           onAccept={onAcceptAiChanges}
           onReject={onRejectAiChanges}
           onClose={() => {
+            setAiEditableReview("");
             setAiPendingDecision(null);
             setIsAiDialogOpen(false);
           }}

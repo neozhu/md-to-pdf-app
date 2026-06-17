@@ -18,14 +18,15 @@ type AiReviewProgressDialogProps = {
   completionSkipped?: boolean;
   completionSummary?: string;
   completionImprovements?: string[];
+  editableReview: string;
   decisionPending: boolean;
-  pendingRiskLevel?: "low" | "medium" | "high";
-  pendingWarnings?: string[];
   tokenUsage?: {
     reviewer?: AiAgentTokenUsage;
     editor?: AiAgentTokenUsage;
   };
   isAiReviewing: boolean;
+  onEditableReviewChange: (value: string) => void;
+  onPolish: () => void;
   onAccept: () => void;
   onReject: () => void;
   onClose: () => void;
@@ -41,11 +42,12 @@ export function AiReviewProgressDialog({
   completionSkipped,
   completionSummary,
   completionImprovements,
+  editableReview,
   decisionPending,
-  pendingRiskLevel,
-  pendingWarnings,
   tokenUsage,
   isAiReviewing,
+  onEditableReviewChange,
+  onPolish,
   onAccept,
   onReject,
   onClose,
@@ -58,15 +60,15 @@ export function AiReviewProgressDialog({
         <div className="space-y-4 p-5">
           <div className="text-sm font-semibold">Improving Your Document</div>
           <div className="text-xs text-muted-foreground">
-            Please hang tight while we polish your writing. This window will close
-            when you close it.
+            Review the suggestions first, then choose whether AI should polish
+            the document.
           </div>
 
           <div className="space-y-2 rounded-md border p-3">
             <AgentRow
               title="Review Pass"
-              active={activeAgent === "reviewer" && !dialogError}
-              done={activeAgent === "editor" && !dialogError}
+              active={activeAgent === "reviewer" && isAiReviewing && !dialogError}
+              done={Boolean(editableReview) || (activeAgent === "editor" && !dialogError)}
               tokenUsage={tokenUsage?.reviewer}
             />
             <AgentRow
@@ -81,7 +83,7 @@ export function AiReviewProgressDialog({
 
           <div className="min-h-6 text-xs text-muted-foreground">{dialogMessage}</div>
 
-          {completed && !dialogError && (
+          {completed && !dialogError && !editableReview && (
             <div className="space-y-3 rounded-md border border-emerald-300/60 bg-emerald-50/70 px-3 py-3 text-xs dark:border-emerald-900/60 dark:bg-emerald-950/30">
               <div className="font-semibold text-emerald-700 dark:text-emerald-300">
                 {decisionPending
@@ -95,20 +97,6 @@ export function AiReviewProgressDialog({
               {completionSummary && (
                 <div className="text-foreground/90">{completionSummary}</div>
               )}
-              {decisionPending && (
-                <div className="rounded-md border border-amber-300/70 bg-amber-100/70 px-2.5 py-2 text-[11px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                  <div className="font-medium">
-                    Factual risk: {(pendingRiskLevel ?? "low").toUpperCase()}
-                  </div>
-                  {(pendingWarnings?.length ?? 0) > 0 && (
-                    <ul className="list-disc space-y-1 pl-4 pt-1">
-                      {pendingWarnings?.slice(0, 2).map((warning, idx) => (
-                        <li key={`${idx}-${warning}`}>{warning}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
               {(completionImprovements?.length ?? 0) > 0 && (
                 <ul className="list-disc space-y-1 pl-4 text-foreground/80">
                   {completionImprovements?.slice(0, 3).map((item, idx) => (
@@ -116,6 +104,24 @@ export function AiReviewProgressDialog({
                   ))}
                 </ul>
               )}
+            </div>
+          )}
+
+          {completed && !dialogError && editableReview && !decisionPending && (
+            <div className="space-y-2">
+              <label
+                htmlFor="ai-review-editable"
+                className="text-xs font-medium text-foreground"
+              >
+                Review suggestions
+              </label>
+              <textarea
+                id="ai-review-editable"
+                value={editableReview}
+                onChange={(event) => onEditableReviewChange(event.target.value)}
+                className="min-h-40 w-full resize-y rounded-md border bg-background px-3 py-2 text-xs leading-5 outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                disabled={isAiReviewing}
+              />
             </div>
           )}
 
@@ -136,7 +142,18 @@ export function AiReviewProgressDialog({
             </div>
           )}
 
-          {(dialogError || (completed && !decisionPending)) && (
+          {completed && !dialogError && editableReview && !decisionPending && (
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={onClose} disabled={isAiReviewing}>
+                Skip Editing
+              </Button>
+              <Button onClick={onPolish} disabled={isAiReviewing}>
+                Apply Review
+              </Button>
+            </div>
+          )}
+
+          {(dialogError || (completed && !decisionPending && !editableReview)) && (
             <div className="flex justify-end">
               <Button onClick={onClose}>Close</Button>
             </div>

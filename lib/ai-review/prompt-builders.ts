@@ -94,7 +94,7 @@ export function buildReviewerPrompt(params: {
   const cues = structureSignals.cues.join(", ");
   return [
     "Review the markdown below. Detect the content language and evaluate in that language.",
-    "Output JSON only: { needsEdit, review, keyImprovements, rewritePlan }.",
+    "Output JSON only: { review, keyImprovements, rewritePlan }.",
     "",
     ...(cues ? [`Structural cues: ${cues}`, ""] : []),
     "<markdown>",
@@ -106,11 +106,22 @@ export function buildReviewerPrompt(params: {
 export function buildEditorPrompt(params: {
   markdown: string;
   reviewerResult: ReviewerResult;
+  userApprovedReview?: string;
   factualBaseline: FactualBaseline;
 }) {
-  const { markdown, reviewerResult, factualBaseline } = params;
+  const { markdown, reviewerResult, userApprovedReview, factualBaseline } = params;
   const constraints = buildFactualConstraints(factualBaseline);
+  const approvedReview = userApprovedReview?.trim();
   return [
+    ...(approvedReview
+      ? [
+          "<user_approved_review>",
+          "Use this user-approved review as the editing brief.",
+          approvedReview,
+          "</user_approved_review>",
+          "",
+        ]
+      : []),
     "<rewrite_plan>",
     `Summary: ${reviewerResult.review}`,
     "",

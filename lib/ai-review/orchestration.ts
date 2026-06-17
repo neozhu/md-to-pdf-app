@@ -102,7 +102,6 @@ function toReviewerResult(value: unknown): ReviewerResult | null {
   if (!value || typeof value !== "object") return null;
   const parsed = value as Partial<ReviewerResult>;
   if (
-    typeof parsed.needsEdit !== "boolean" ||
     typeof parsed.review !== "string" ||
     !Array.isArray(parsed.keyImprovements) ||
     !Array.isArray(parsed.rewritePlan)
@@ -110,7 +109,6 @@ function toReviewerResult(value: unknown): ReviewerResult | null {
     return null;
   }
   return {
-    needsEdit: parsed.needsEdit,
     review: parsed.review,
     keyImprovements: parsed.keyImprovements.filter(
       (item): item is string => typeof item === "string" && item.trim().length > 0,
@@ -152,9 +150,8 @@ function tryParseJson(text: string): unknown {
 
 function buildFallbackReviewerResult(): ReviewerResult {
   return {
-    needsEdit: false,
     review:
-      "No high-impact editorial issues detected; keep the original text with minimal intervention.",
+      "No high-impact editorial issues detected.",
     keyImprovements: [
       "No high-impact clarity or structure issues were confirmed.",
       "Avoid unnecessary paraphrasing when meaning is already clear.",
@@ -164,6 +161,83 @@ function buildFallbackReviewerResult(): ReviewerResult {
       "Skip editing unless a clear, high-impact issue is identified.",
     ],
   };
+}
+
+function reviewerResultToEditableReview(result: ReviewerResult): string {
+  const lines = [`Summary: ${result.review}`];
+  if (result.keyImprovements.length > 0) {
+    lines.push("", "Key improvements:");
+    lines.push(...result.keyImprovements.map((item) => `- ${item}`));
+  }
+  if (result.rewritePlan.length > 0) {
+    lines.push("", "Rewrite plan:");
+    lines.push(...result.rewritePlan.map((item, index) => `${index + 1}. ${item}`));
+  }
+  return lines.join("\n");
+}
+
+export function buildPolishDisplayReviewerResult(editableReview: string): ReviewerResult {
+  const changes = summarizeApprovedReviewChanges(editableReview);
+  return {
+    review:
+      changes.length > 0
+        ? "Applied changes from your approved review."
+        : "AI polish completed using your approved review.",
+    keyImprovements: changes,
+    rewritePlan: [],
+  };
+}
+
+function summarizeApprovedReviewChanges(editableReview: string): string[] {
+  const ignoredPrefixes = new Set([
+    "summary",
+    "key improvements",
+    "rewrite plan",
+    "steps",
+  ]);
+  return editableReview
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line))
+    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, "").trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => {
+      const normalized = line.replace(/:$/, "").toLowerCase();
+      return !ignoredPrefixes.has(normalized);
+    })
+    .slice(0, 3);
+}
+
+function buildPolishPromptReviewerResult(editableReview: string): ReviewerResult {
+  const review = editableReview.trim();
+  return {
+    review: review || "No user-approved review was provided.",
+    keyImprovements: review ? [review] : [],
+    rewritePlan: review ? [review] : [],
+  };
+}
+
+function reviewerSchema() {
+  return jsonSchema<ReviewerResult>({
+    type: "object",
+    properties: {
+      review: { type: "string", minLength: 1 },
+      keyImprovements: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 0,
+        maxItems: 5,
+      },
+      rewritePlan: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 0,
+        maxItems: 6,
+      },
+    },
+    required: ["review", "keyImprovements", "rewritePlan"],
+    additionalProperties: false,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +301,211 @@ export function resolveWorkflowContext(markdown: string): PrecomputedWorkflowCon
 // Main pipeline
 // ---------------------------------------------------------------------------
 
+export async function runReviewPass(params: {
+  markdown: string;
+  model: string;
+  openai: ReturnType<typeof createOpenAI>;
+  onStage?: (event: StageEvent) => void;
+  abortSignal?: AbortSignal;
+}): Promise<AiReviewPayload> {
+  const { markdown, model, openai, onStage, abortSignal } = params;
+  const throwIfAborted = () => {
+    if (!abortSignal?.aborted) return;
+    const reason = abortSignal.reason;
+    throw reason instanceof Error ? reason : new Error("Request aborted.");
+  };
+
+  throwIfAborted();
+  const workflow = resolveWorkflowContext(markdown);
+  const reviewerUsage = emptyAgentTokenUsage();
+  const editorUsage = emptyAgentTokenUsage();
+  let reviewerResult = buildFallbackReviewerResult();
+
+  onStage?.({
+    agent: "reviewer",
+    status: "started",
+    message: "Reviewer Agent is analyzing clarity and flow...",
+  });
+
+  try {
+    const reviewer = await generateText({
+      model: openai(model),
+      abortSignal,
+      maxOutputTokens: estimateMaxTokens("reviewer", markdown.length),
+      system: REVIEWER_SYSTEM_PROMPT,
+      prompt: buildReviewerPrompt({
+        markdown,
+        structureSignals: workflow.structureSignals,
+      }),
+      output: Output.object({
+        schema: reviewerSchema(),
+        name: "reviewer_result",
+      }),
+      providerOptions: getOpenAIProviderOptions("reviewer"),
+    });
+    accumulateUsage(reviewerUsage, reviewer);
+    throwIfAborted();
+    reviewerResult = extractReviewerResult(reviewer);
+  } catch (error) {
+    if (abortSignal?.aborted) throw error;
+    const isNoOutput = NoOutputGeneratedError.isInstance(error);
+    if (isNoOutput) {
+      console.warn("[ai-review] Reviewer returned no structured output, using conservative fallback.");
+    } else {
+      console.error("[ai-review] Reviewer agent failed, using fallback:", error);
+    }
+  }
+
+  onStage?.({
+    agent: "reviewer",
+    status: "completed",
+    message: "Review pass complete. Review the suggestions before polishing.",
+    usage: normalizeAgentTokenUsage(reviewerUsage),
+  });
+
+  return {
+    review: reviewerResult.review,
+    keyImprovements: reviewerResult.keyImprovements,
+    rewritePlan: reviewerResult.rewritePlan,
+    editableReview: reviewerResultToEditableReview(reviewerResult),
+    polishedMarkdown: markdown,
+    changed: false,
+    tokenUsage: {
+      reviewer: normalizeAgentTokenUsage(reviewerUsage),
+      editor: normalizeAgentTokenUsage(editorUsage),
+    },
+    toolInsights: {
+      workflowRoute: workflow.route,
+      structureRecoveryDetected: workflow.route === "BRANCH_A",
+      editorSkipped: true,
+      structureCues: workflow.structureSignals.cues,
+      rawBlockCount: workflow.rawBlocksResult.blockCount,
+      headingCandidateCount: workflow.rawBlocksResult.headingCandidateCount,
+      listCandidateCount: workflow.rawBlocksResult.listCandidateCount,
+      codeCandidateCount: workflow.rawBlocksResult.codeCandidateCount,
+      recoveredCodeBlockCount: workflow.codeRecoveryResult.recoveredBlockCount,
+      factualRiskLevel: "low",
+      factualWarnings: [],
+      factualRecommendation: "No changes were made during review.",
+    },
+  };
+}
+
+export async function runPolishPass(params: {
+  markdown: string;
+  userApprovedReview: string;
+  model: string;
+  openai: ReturnType<typeof createOpenAI>;
+  onStage?: (event: StageEvent) => void;
+  abortSignal?: AbortSignal;
+}): Promise<AiReviewPayload> {
+  const {
+    markdown,
+    userApprovedReview,
+    model,
+    openai,
+    onStage,
+    abortSignal,
+  } = params;
+  const throwIfAborted = () => {
+    if (!abortSignal?.aborted) return;
+    const reason = abortSignal.reason;
+    throw reason instanceof Error ? reason : new Error("Request aborted.");
+  };
+
+  const approvedReview = userApprovedReview.trim();
+  if (!approvedReview) {
+    throw new Error("Missing review instructions for polish pass.");
+  }
+
+  throwIfAborted();
+  const workflow = resolveWorkflowContext(markdown);
+  const reviewerUsage = emptyAgentTokenUsage();
+  const editorUsage = emptyAgentTokenUsage();
+  const displayReviewerResult = buildPolishDisplayReviewerResult(approvedReview);
+  const promptReviewerResult = buildPolishPromptReviewerResult(approvedReview);
+  let polishedMarkdown = markdown;
+
+  onStage?.({
+    agent: "reviewer",
+    status: "completed",
+    message: "Using your approved review as the polish brief.",
+    usage: normalizeAgentTokenUsage(reviewerUsage),
+  });
+  onStage?.({
+    agent: "editor",
+    status: "started",
+    message: "Editor Agent is polishing with your approved review...",
+  });
+
+  try {
+    const editorResult = await generateText({
+      model: openai(model),
+      abortSignal,
+      maxOutputTokens: estimateMaxTokens("editor", markdown.length),
+      system: EDITOR_SYSTEM_PROMPT,
+      prompt: buildEditorPrompt({
+        markdown,
+        reviewerResult: promptReviewerResult,
+        userApprovedReview: approvedReview,
+        factualBaseline: workflow.factualBaseline,
+      }),
+      providerOptions: getOpenAIProviderOptions("editor"),
+    });
+    accumulateUsage(editorUsage, editorResult);
+    throwIfAborted();
+    polishedMarkdown = editorResult.text.trim() || markdown;
+    onStage?.({
+      agent: "editor",
+      status: "completed",
+      message: "Polish pass complete.",
+      usage: normalizeAgentTokenUsage(editorUsage),
+    });
+  } catch (error) {
+    if (abortSignal?.aborted) throw error;
+    console.error("[ai-review] Editor agent failed, keeping original:", error);
+    onStage?.({
+      agent: "editor",
+      status: "completed",
+      message: `Editor agent encountered an error: ${error instanceof Error ? error.message : "unknown"}. Original text preserved.`,
+      usage: normalizeAgentTokenUsage(editorUsage),
+    });
+  }
+
+  const before = normalizeMarkdownForCompare(markdown);
+  const changed = normalizeMarkdownForCompare(polishedMarkdown) !== before;
+  const factualRisk = changed
+    ? factualGuardWithBaseline(workflow.factualBaseline, polishedMarkdown)
+    : { riskLevel: "low" as const, warnings: [] as string[], recommendation: "No changes were made; factual fidelity is intact." };
+
+  return {
+    review: displayReviewerResult.review,
+    keyImprovements: displayReviewerResult.keyImprovements,
+    rewritePlan: displayReviewerResult.rewritePlan,
+    editableReview: approvedReview,
+    polishedMarkdown,
+    changed,
+    tokenUsage: {
+      reviewer: normalizeAgentTokenUsage(reviewerUsage),
+      editor: normalizeAgentTokenUsage(editorUsage),
+    },
+    toolInsights: {
+      workflowRoute: workflow.route,
+      structureRecoveryDetected: workflow.route === "BRANCH_A",
+      editorSkipped: false,
+      structureCues: workflow.structureSignals.cues,
+      rawBlockCount: workflow.rawBlocksResult.blockCount,
+      headingCandidateCount: workflow.rawBlocksResult.headingCandidateCount,
+      listCandidateCount: workflow.rawBlocksResult.listCandidateCount,
+      codeCandidateCount: workflow.rawBlocksResult.codeCandidateCount,
+      recoveredCodeBlockCount: workflow.codeRecoveryResult.recoveredBlockCount,
+      factualRiskLevel: factualRisk.riskLevel,
+      factualWarnings: factualRisk.warnings,
+      factualRecommendation: factualRisk.recommendation,
+    },
+  };
+}
+
 export async function runDualAgentReview(params: {
   markdown: string;
   model: string;
@@ -245,7 +524,6 @@ export async function runDualAgentReview(params: {
   const workflow = resolveWorkflowContext(markdown);
   const reviewerUsage = emptyAgentTokenUsage();
   const editorUsage = emptyAgentTokenUsage();
-  let editorSkipped = false;
   let review = "";
   let keyImprovements: string[] = [];
   let polishedMarkdown = markdown;
@@ -300,28 +578,6 @@ export async function runDualAgentReview(params: {
       message: "Reviewer Agent is analyzing clarity and flow...",
     });
 
-    const reviewerSchema = jsonSchema<ReviewerResult>({
-      type: "object",
-      properties: {
-        needsEdit: { type: "boolean" },
-        review: { type: "string", minLength: 1 },
-        keyImprovements: {
-          type: "array",
-          items: { type: "string" },
-          minItems: 0,
-          maxItems: 5,
-        },
-        rewritePlan: {
-          type: "array",
-          items: { type: "string" },
-          minItems: 0,
-          maxItems: 6,
-        },
-      },
-      required: ["needsEdit", "review", "keyImprovements", "rewritePlan"],
-      additionalProperties: false,
-    });
-
     let reviewerResult = buildFallbackReviewerResult();
     let reviewerFailed = false;
     try {
@@ -335,7 +591,7 @@ export async function runDualAgentReview(params: {
           structureSignals: workflow.structureSignals,
         }),
         output: Output.object({
-          schema: reviewerSchema,
+          schema: reviewerSchema(),
           name: "reviewer_result",
         }),
         providerOptions: getOpenAIProviderOptions("reviewer"),
@@ -356,7 +612,7 @@ export async function runDualAgentReview(params: {
         agent: "reviewer",
         status: "completed",
         message: isNoOutput
-          ? "Reviewer returned no structured output. Using conservative fallback (no edits needed)."
+          ? "Reviewer returned no structured output. Using conservative fallback."
           : `Reviewer agent encountered an error: ${error instanceof Error ? error.message : "unknown"}. Using conservative fallback.`,
         usage: normalizeAgentTokenUsage(reviewerUsage),
       });
@@ -373,55 +629,46 @@ export async function runDualAgentReview(params: {
         usage: normalizeAgentTokenUsage(reviewerUsage),
       });
     }
-    if (!reviewerResult.needsEdit) {
-      editorSkipped = true;
+
+    onStage?.({
+      agent: "editor",
+      status: "started",
+      message: "Editor Agent is polishing with factual constraints...",
+    });
+
+    try {
+      const editorResult = await generateText({
+        model: openai(model),
+        abortSignal,
+        maxOutputTokens: estimateMaxTokens("editor", markdown.length),
+        system: EDITOR_SYSTEM_PROMPT,
+        prompt: buildEditorPrompt({
+          markdown,
+          reviewerResult,
+          factualBaseline: workflow.factualBaseline,
+        }),
+        providerOptions: getOpenAIProviderOptions("editor"),
+      });
+      accumulateUsage(editorUsage, editorResult);
+      throwIfAborted();
+
+      polishedMarkdown = editorResult.text.trim() || markdown;
       onStage?.({
         agent: "editor",
         status: "completed",
-        message: "Reviewer determined no high-impact edits are needed. Editor step skipped.",
+        message: "Polish pass complete.",
         usage: normalizeAgentTokenUsage(editorUsage),
       });
-    } else {
+    } catch (error) {
+      if (abortSignal?.aborted) throw error;
+      console.error("[ai-review] Editor agent failed, keeping original:", error);
+      polishedMarkdown = markdown;
       onStage?.({
         agent: "editor",
-        status: "started",
-        message: "Editor Agent is polishing with factual constraints...",
+        status: "completed",
+        message: `Editor agent encountered an error: ${error instanceof Error ? error.message : "unknown"}. Original text preserved.`,
+        usage: normalizeAgentTokenUsage(editorUsage),
       });
-
-      try {
-        const editorResult = await generateText({
-          model: openai(model),
-          abortSignal,
-          maxOutputTokens: estimateMaxTokens("editor", markdown.length),
-          system: EDITOR_SYSTEM_PROMPT,
-          prompt: buildEditorPrompt({
-            markdown,
-            reviewerResult,
-            factualBaseline: workflow.factualBaseline,
-          }),
-          providerOptions: getOpenAIProviderOptions("editor"),
-        });
-        accumulateUsage(editorUsage, editorResult);
-        throwIfAborted();
-
-        polishedMarkdown = editorResult.text.trim() || markdown;
-        onStage?.({
-          agent: "editor",
-          status: "completed",
-          message: "Polish pass complete.",
-          usage: normalizeAgentTokenUsage(editorUsage),
-        });
-      } catch (error) {
-        if (abortSignal?.aborted) throw error;
-        console.error("[ai-review] Editor agent failed, keeping original:", error);
-        polishedMarkdown = markdown;
-        onStage?.({
-          agent: "editor",
-          status: "completed",
-          message: `Editor agent encountered an error: ${error instanceof Error ? error.message : "unknown"}. Original text preserved.`,
-          usage: normalizeAgentTokenUsage(editorUsage),
-        });
-      }
     }
   }
 
@@ -445,6 +692,8 @@ export async function runDualAgentReview(params: {
   return {
     review,
     keyImprovements,
+    rewritePlan: [],
+    editableReview: review,
     polishedMarkdown,
     changed,
     tokenUsage: {
@@ -454,7 +703,7 @@ export async function runDualAgentReview(params: {
     toolInsights: {
       workflowRoute: workflow.route,
       structureRecoveryDetected: workflow.route === "BRANCH_A",
-      editorSkipped,
+      editorSkipped: false,
       structureCues: workflow.structureSignals.cues,
       rawBlockCount: workflow.rawBlocksResult.blockCount,
       headingCandidateCount: workflow.rawBlocksResult.headingCandidateCount,

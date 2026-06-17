@@ -24,6 +24,11 @@ describe("AI review prompts", () => {
     expect(EDITOR_SYSTEM_PROMPT).toContain("<output_contract>");
   });
 
+  it("does not ask the reviewer to decide whether edits are needed", () => {
+    expect(REVIEWER_SYSTEM_PROMPT).not.toContain("needsEdit");
+    expect(REVIEWER_SYSTEM_PROMPT).not.toContain("No edit needed");
+  });
+
   it("requires the editor to self-check factual preservation before final output", () => {
     expect(EDITOR_SYSTEM_PROMPT).toContain("<final_self_check>");
     expect(EDITOR_SYSTEM_PROMPT).toContain("Only output the final Markdown");

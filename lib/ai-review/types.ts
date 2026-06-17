@@ -6,7 +6,6 @@
 export type WorkflowRoute = "BRANCH_A" | "BRANCH_B";
 
 export type ReviewerResult = {
-  needsEdit: boolean;
   review: string;
   keyImprovements: string[];
   rewritePlan: string[];
@@ -29,6 +28,8 @@ export type AgentTokenUsageSummary = {
 export type AiReviewPayload = {
   review: string;
   keyImprovements: string[];
+  rewritePlan: string[];
+  editableReview: string;
   polishedMarkdown: string;
   changed: boolean;
   tokenUsage: AgentTokenUsageSummary;
@@ -185,6 +186,8 @@ export type AiAgentTokenUsage = {
 export type AiReviewResponse = {
   review?: string;
   keyImprovements?: string[];
+  rewritePlan?: string[];
+  editableReview?: string;
   polishedMarkdown?: string;
   changed?: boolean;
   tokenUsage?: AiTokenUsage;
