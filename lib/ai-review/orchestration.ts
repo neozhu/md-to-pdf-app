@@ -17,9 +17,12 @@ import type {
 } from "./types";
 import {
   FORMATTER_SYSTEM_PROMPT,
-  REVIEWER_SYSTEM_PROMPT,
-  EDITOR_SYSTEM_PROMPT,
 } from "./prompts";
+import {
+  buildEditorInstructions,
+  buildReviewerInstructions,
+} from "./review-profiles";
+import type { ReviewProfileId } from "./review-profile-options";
 import {
   buildStructureSignals,
   parseRawBlocks,
@@ -69,8 +72,12 @@ function accumulateUsage(
       inputTokens?: number;
       outputTokens?: number;
       totalTokens?: number;
-      reasoningTokens?: number;
-      cachedInputTokens?: number;
+      inputTokenDetails?: {
+        cacheReadTokens?: number;
+      };
+      outputTokenDetails?: {
+        reasoningTokens?: number;
+      };
     };
   },
 ) {
@@ -86,11 +93,11 @@ function accumulateUsage(
   if (typeof usage.totalTokens === "number") {
     accumulator.totalTokens += usage.totalTokens;
   }
-  if (typeof usage.reasoningTokens === "number") {
-    accumulator.reasoningTokens += usage.reasoningTokens;
+  if (typeof usage.outputTokenDetails?.reasoningTokens === "number") {
+    accumulator.reasoningTokens += usage.outputTokenDetails.reasoningTokens;
   }
-  if (typeof usage.cachedInputTokens === "number") {
-    accumulator.cachedInputTokens += usage.cachedInputTokens;
+  if (typeof usage.inputTokenDetails?.cacheReadTokens === "number") {
+    accumulator.cachedInputTokens += usage.inputTokenDetails.cacheReadTokens;
   }
 }
 
@@ -305,10 +312,11 @@ export async function runReviewPass(params: {
   markdown: string;
   model: string;
   openai: ReturnType<typeof createOpenAI>;
+  profile: ReviewProfileId;
   onStage?: (event: StageEvent) => void;
   abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
-  const { markdown, model, openai, onStage, abortSignal } = params;
+  const { markdown, model, openai, profile, onStage, abortSignal } = params;
   const throwIfAborted = () => {
     if (!abortSignal?.aborted) return;
     const reason = abortSignal.reason;
@@ -332,7 +340,7 @@ export async function runReviewPass(params: {
       model: openai(model),
       abortSignal,
       maxOutputTokens: estimateMaxTokens("reviewer", markdown.length),
-      system: REVIEWER_SYSTEM_PROMPT,
+      instructions: buildReviewerInstructions(profile),
       prompt: buildReviewerPrompt({
         markdown,
         structureSignals: workflow.structureSignals,
@@ -396,6 +404,7 @@ export async function runPolishPass(params: {
   userApprovedReview: string;
   model: string;
   openai: ReturnType<typeof createOpenAI>;
+  profile: ReviewProfileId;
   onStage?: (event: StageEvent) => void;
   abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
@@ -404,6 +413,7 @@ export async function runPolishPass(params: {
     userApprovedReview,
     model,
     openai,
+    profile,
     onStage,
     abortSignal,
   } = params;
@@ -443,7 +453,7 @@ export async function runPolishPass(params: {
       model: openai(model),
       abortSignal,
       maxOutputTokens: estimateMaxTokens("editor", markdown.length),
-      system: EDITOR_SYSTEM_PROMPT,
+      instructions: buildEditorInstructions(profile),
       prompt: buildEditorPrompt({
         markdown,
         reviewerResult: promptReviewerResult,
@@ -510,10 +520,11 @@ export async function runDualAgentReview(params: {
   markdown: string;
   model: string;
   openai: ReturnType<typeof createOpenAI>;
+  profile: ReviewProfileId;
   onStage?: (event: StageEvent) => void;
   abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
-  const { markdown, model, openai, onStage, abortSignal } = params;
+  const { markdown, model, openai, profile, onStage, abortSignal } = params;
   const throwIfAborted = () => {
     if (!abortSignal?.aborted) return;
     const reason = abortSignal.reason;
@@ -545,7 +556,7 @@ export async function runDualAgentReview(params: {
       model: openai(model),
       abortSignal,
       maxOutputTokens: estimateMaxTokens("formatter", markdown.length),
-      system: FORMATTER_SYSTEM_PROMPT,
+      instructions: FORMATTER_SYSTEM_PROMPT,
       prompt: buildFormatterPrompt({
         markdown,
         rawBlocksResult: workflow.rawBlocksResult,
@@ -585,7 +596,7 @@ export async function runDualAgentReview(params: {
         model: openai(model),
         abortSignal,
         maxOutputTokens: estimateMaxTokens("reviewer", markdown.length),
-        system: REVIEWER_SYSTEM_PROMPT,
+        instructions: buildReviewerInstructions(profile),
         prompt: buildReviewerPrompt({
           markdown,
           structureSignals: workflow.structureSignals,
@@ -641,7 +652,7 @@ export async function runDualAgentReview(params: {
         model: openai(model),
         abortSignal,
         maxOutputTokens: estimateMaxTokens("editor", markdown.length),
-        system: EDITOR_SYSTEM_PROMPT,
+        instructions: buildEditorInstructions(profile),
         prompt: buildEditorPrompt({
           markdown,
           reviewerResult,

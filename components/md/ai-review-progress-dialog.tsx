@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import type { ReviewProfileId } from "@/lib/ai-review/review-profile-options";
 import type { AiAgentTokenUsage } from "@/lib/ai-review/types";
 
 export type AiAgent = "reviewer" | "editor" | null;
@@ -10,6 +11,12 @@ export type { AiAgentTokenUsage };
 
 type AiReviewProgressDialogProps = {
   open: boolean;
+  reviewProfiles: ReadonlyArray<{
+    id: ReviewProfileId;
+    label: string;
+    description: string;
+  }>;
+  selectedReviewProfile: ReviewProfileId | "";
   activeAgent: AiAgent;
   dialogError: string | null;
   dialogMessage: string;
@@ -25,6 +32,8 @@ type AiReviewProgressDialogProps = {
     editor?: AiAgentTokenUsage;
   };
   isAiReviewing: boolean;
+  onReviewProfileChange: (value: ReviewProfileId) => void;
+  onStartReview: () => void;
   onEditableReviewChange: (value: string) => void;
   onPolish: () => void;
   onAccept: () => void;
@@ -34,6 +43,8 @@ type AiReviewProgressDialogProps = {
 
 export function AiReviewProgressDialog({
   open,
+  reviewProfiles,
+  selectedReviewProfile,
   activeAgent,
   dialogError,
   dialogMessage,
@@ -46,6 +57,8 @@ export function AiReviewProgressDialog({
   decisionPending,
   tokenUsage,
   isAiReviewing,
+  onReviewProfileChange,
+  onStartReview,
   onEditableReviewChange,
   onPolish,
   onAccept,
@@ -53,6 +66,16 @@ export function AiReviewProgressDialog({
   onClose,
 }: AiReviewProgressDialogProps) {
   if (!open) return null;
+  const selectedProfile = reviewProfiles.find(
+    (profile) => profile.id === selectedReviewProfile,
+  );
+  const isProfileSelectionPending =
+    !isAiReviewing &&
+    !completed &&
+    !dialogError &&
+    !editableReview &&
+    !decisionPending &&
+    activeAgent === null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4">
@@ -60,26 +83,81 @@ export function AiReviewProgressDialog({
         <div className="space-y-4 p-5">
           <div className="text-sm font-semibold">Improving Your Document</div>
           <div className="text-xs text-muted-foreground">
-            Review the suggestions first, then choose whether AI should polish
-            the document.
+            {isProfileSelectionPending
+              ? "Choose how the document should be reviewed before starting."
+              : "Review the suggestions first, then choose whether AI should polish the document."}
           </div>
+          {!isProfileSelectionPending && selectedProfile && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs">
+              <div className="font-medium text-foreground">
+                Selected profile: {selectedProfile?.label}
+              </div>
+              <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                {selectedProfile?.description}
+              </div>
+            </div>
+          )}
 
-          <div className="space-y-2 rounded-md border p-3">
-            <AgentRow
-              title="Review Pass"
-              active={activeAgent === "reviewer" && isAiReviewing && !dialogError}
-              done={Boolean(editableReview) || (activeAgent === "editor" && !dialogError)}
-              tokenUsage={tokenUsage?.reviewer}
-            />
-            <AgentRow
-              title="Polish Pass"
-              active={activeAgent === "editor" && !dialogError}
-              done={
-                dialogError ? false : activeAgent === "editor" && !isAiReviewing
-              }
-              tokenUsage={tokenUsage?.editor}
-            />
-          </div>
+          {isProfileSelectionPending ? (
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="text-xs font-medium text-foreground">
+                Review Profile
+              </div>
+              <div className="grid gap-2">
+                {reviewProfiles.map((profile) => {
+                  const selected = selectedReviewProfile === profile.id;
+                  return (
+                    <button
+                      key={profile.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => onReviewProfileChange(profile.id)}
+                      className={`rounded-md border px-3 py-2 text-left transition ${
+                        selected
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-background hover:bg-muted"
+                      }`}
+                    >
+                      <span className="block text-xs font-medium">
+                        {profile.label}
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                        {profile.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={onStartReview}
+                  disabled={!selectedReviewProfile || isAiReviewing}
+                >
+                  Start Review
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 rounded-md border p-3">
+              <AgentRow
+                title="Review Pass"
+                active={activeAgent === "reviewer" && isAiReviewing && !dialogError}
+                done={Boolean(editableReview) || (activeAgent === "editor" && !dialogError)}
+                tokenUsage={tokenUsage?.reviewer}
+              />
+              <AgentRow
+                title="Polish Pass"
+                active={activeAgent === "editor" && !dialogError}
+                done={
+                  dialogError ? false : activeAgent === "editor" && !isAiReviewing
+                }
+                tokenUsage={tokenUsage?.editor}
+              />
+            </div>
+          )}
 
           <div className="min-h-6 text-xs text-muted-foreground">{dialogMessage}</div>
 
