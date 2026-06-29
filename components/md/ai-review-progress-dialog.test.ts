@@ -29,4 +29,18 @@ describe("AI review progress dialog copy", () => {
       'done={Boolean(editableReview) || (activeAgent === "editor" && !dialogError)}',
     );
   });
+
+  it("requires a review profile before starting the review pass", () => {
+    expect(source).toContain("Review Profile");
+    expect(source).toContain("Start Review");
+    expect(source).toContain("onReviewProfileChange");
+    expect(source).toContain("onStartReview");
+    expect(source).toContain("disabled={!selectedReviewProfile || isAiReviewing}");
+  });
+
+  it("shows the selected review profile after review starts", () => {
+    expect(source).toContain("Selected profile");
+    expect(source).toContain("selectedProfile?.label");
+    expect(source).toContain("selectedProfile?.description");
+  });
 });

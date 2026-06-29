@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       model: openai(FILENAME_SUGGESTION_MODEL),
       abortSignal: req.signal,
       maxOutputTokens: 64,
-      system:
+      instructions:
         "Generate a short, descriptive PDF filename for the document. Return only the filename, no explanation. Use 2 to 5 lowercase English words separated by hyphens. Keep the full filename under 48 characters including .pdf. Include .pdf.",
       prompt: [
         "Create a filename for this document:",

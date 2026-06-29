@@ -29,6 +29,10 @@ import type {
   AiReviewResponse,
 } from "@/lib/ai-review/types";
 import {
+  REVIEW_PROFILE_OPTIONS,
+  type ReviewProfileId,
+} from "@/lib/ai-review/review-profile-options";
+import {
   AiReviewProgressDialog,
   type AiAgent,
   type AiAgentTokenUsage,
@@ -258,6 +262,9 @@ export function MdDashboard() {
     string[]
   >([]);
   const [aiEditableReview, setAiEditableReview] = React.useState("");
+  const [selectedReviewProfile, setSelectedReviewProfile] = React.useState<
+    ReviewProfileId | ""
+  >("");
   const [aiPendingDecision, setAiPendingDecision] = React.useState<
     AiPendingDecision | null
   >(null);
@@ -506,6 +513,7 @@ export function MdDashboard() {
   async function requestAiReviewStream(body: {
     mode: "review" | "polish";
     markdown: string;
+    profile?: ReviewProfileId;
     review?: string;
   }) {
     const res = await fetch("/api/ai-review?stream=1", {
@@ -592,9 +600,34 @@ export function MdDashboard() {
     return finalResult ?? {};
   }
 
-  async function onAiReview() {
+  function resetAiDialogState() {
+    setAiDialogError(null);
+    setAiActiveAgent(null);
+    setAiDialogMessage("Choose a review profile to start.");
+    setAiTokenUsage({});
+    setAiCompleted(false);
+    setAiCompletionChanged(false);
+    setAiCompletionSkipped(false);
+    setAiCompletionSummary("");
+    setAiCompletionImprovements([]);
+    setAiEditableReview("");
+    setAiPendingDecision(null);
+  }
+
+  function onOpenAiReviewDialog() {
     if (!markdownText.trim()) {
       toast.error("Please write some Markdown first.");
+      return;
+    }
+
+    resetAiDialogState();
+    setSelectedReviewProfile("");
+    setIsAiDialogOpen(true);
+  }
+
+  async function onAiReview() {
+    if (!selectedReviewProfile) {
+      toast.error("Please choose a review profile first.");
       return;
     }
 
@@ -616,6 +649,7 @@ export function MdDashboard() {
       const data = await requestAiReviewStream({
         mode: "review",
         markdown: markdownText,
+        profile: selectedReviewProfile,
       });
 
       const summary = data.review?.trim() || "Document polished by AI editor.";
@@ -681,6 +715,7 @@ export function MdDashboard() {
       const data = await requestAiReviewStream({
         mode: "polish",
         markdown: markdownText,
+        profile: selectedReviewProfile || "general",
         review: aiEditableReview,
       });
 
@@ -866,7 +901,7 @@ export function MdDashboard() {
           isCopying={isCopying}
           onDownload={onDownload}
           onCopyForOneNote={onCopyForOneNote}
-          onAiReview={onAiReview}
+          onAiReview={onOpenAiReviewDialog}
           onPrint={onPrint}
           onSignOut={onSignOut}
         />
@@ -963,6 +998,8 @@ export function MdDashboard() {
 
         <AiReviewProgressDialog
           open={isAiDialogOpen}
+          reviewProfiles={REVIEW_PROFILE_OPTIONS}
+          selectedReviewProfile={selectedReviewProfile}
           activeAgent={aiActiveAgent}
           dialogError={aiDialogError}
           dialogMessage={aiDialogMessage}
@@ -975,6 +1012,8 @@ export function MdDashboard() {
           decisionPending={Boolean(aiPendingDecision)}
           tokenUsage={aiTokenUsage}
           isAiReviewing={isAiReviewing}
+          onReviewProfileChange={setSelectedReviewProfile}
+          onStartReview={onAiReview}
           onEditableReviewChange={setAiEditableReview}
           onPolish={onPolishFromReview}
           onAccept={onAcceptAiChanges}
@@ -982,6 +1021,7 @@ export function MdDashboard() {
           onClose={() => {
             setAiEditableReview("");
             setAiPendingDecision(null);
+            setSelectedReviewProfile("");
             setIsAiDialogOpen(false);
           }}
         />

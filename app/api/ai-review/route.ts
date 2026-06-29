@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createOpenAI } from "@ai-sdk/openai";
 import { runDualAgentReview, runPolishPass, runReviewPass } from "@/lib/ai-review";
 import { DEFAULT_AI_REVIEW_MODEL } from "@/lib/openai-models";
+import { resolveReviewProfileId } from "@/lib/ai-review/review-profile-options";
 
 export const runtime = "nodejs";
 
@@ -25,10 +26,11 @@ function resolveMaxInputTokens() {
 
 export async function POST(req: Request) {
   try {
-    const { markdown, mode, review } = (await req.json().catch(() => ({}))) as {
+    const { markdown, mode, review, profile } = (await req.json().catch(() => ({}))) as {
       markdown?: unknown;
       mode?: unknown;
       review?: unknown;
+      profile?: unknown;
     };
 
     if (typeof markdown !== "string" || !markdown.trim()) {
@@ -65,6 +67,7 @@ export async function POST(req: Request) {
     }
 
     const model = process.env.OPENAI_MODEL ?? DEFAULT_AI_REVIEW_MODEL;
+    const reviewProfileId = resolveReviewProfileId(profile);
     const baseUrl = process.env.OPENAI_BASE_URL;
     const openai = createOpenAI({
       apiKey,
@@ -83,6 +86,7 @@ export async function POST(req: Request) {
           markdown,
           model,
           openai,
+          profile: reviewProfileId,
           onStage: options?.onStage,
           abortSignal: options?.abortSignal,
         });
@@ -96,6 +100,7 @@ export async function POST(req: Request) {
           userApprovedReview: review,
           model,
           openai,
+          profile: reviewProfileId,
           onStage: options?.onStage,
           abortSignal: options?.abortSignal,
         });
@@ -104,6 +109,7 @@ export async function POST(req: Request) {
         markdown,
         model,
         openai,
+        profile: reviewProfileId,
         onStage: options?.onStage,
         abortSignal: options?.abortSignal,
       });
