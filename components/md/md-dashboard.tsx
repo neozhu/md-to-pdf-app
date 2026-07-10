@@ -39,7 +39,11 @@ import {
 } from "./ai-review-progress-dialog";
 import { MdDashboardHeader } from "./md-dashboard-header";
 import { MdHistorySidebarContent } from "./md-history-sidebar-content";
-import { MdEditor } from "./md-editor";
+import {
+  MdEditor,
+  type EditorHistoryState,
+  type MdEditorHandle,
+} from "./md-editor";
 import { MdPreview } from "./md-preview";
 import {
   mdFileNameToPdfFileName,
@@ -136,6 +140,7 @@ function SidebarShell({
 export function MdDashboard() {
   const emptyDocs = React.useMemo(() => [], []);
   const history = useMdHistory(emptyDocs);
+  const editorRef = React.useRef<MdEditorHandle>(null);
   const didUserEditRef = React.useRef(false);
   const autoRenameAttemptedDocIdsRef = React.useRef(new Set<string>());
   const hydrateRef = React.useRef(history.hydrate);
@@ -147,9 +152,20 @@ export function MdDashboard() {
   const [markdownText, setMarkdownText] = React.useState(
     () => history.activeDoc.markdown,
   );
+  const [editorHistoryState, setEditorHistoryState] =
+    React.useState<EditorHistoryState>({
+      canUndo: false,
+      canRedo: false,
+    });
   const onEditorChange = React.useCallback((value: string) => {
     didUserEditRef.current = true;
     setMarkdownText(value);
+  }, []);
+  const onUndo = React.useCallback(() => {
+    editorRef.current?.undo();
+  }, []);
+  const onRedo = React.useCallback(() => {
+    editorRef.current?.redo();
   }, []);
   const [viewMode, setViewMode] = React.useState<ViewMode>("split");
   const requestFilenameSuggestion = React.useCallback(
@@ -894,6 +910,10 @@ export function MdDashboard() {
           onOpenSidebar={() => setIsSidebarOpen(true)}
           fileName={fileName}
           onFileNameChange={setFileName}
+          canUndo={editorHistoryState.canUndo}
+          canRedo={editorHistoryState.canRedo}
+          onUndo={onUndo}
+          onRedo={onRedo}
           isBusy={isBusy}
           canExport={canExport}
           exportingAction={exportingAction}
@@ -921,8 +941,10 @@ export function MdDashboard() {
                       <div className="min-h-0 flex-1">
                         <MdEditor
                           key={`editor-${history.activeDocId}`}
+                          ref={editorRef}
                           value={markdownText}
                           onChange={onEditorChange}
+                          onHistoryStateChange={setEditorHistoryState}
                         />
                       </div>
                     </div>
@@ -945,8 +967,10 @@ export function MdDashboard() {
                   <div className="min-h-0 flex-1">
                     <MdEditor
                       key={`editor-${history.activeDocId}`}
+                      ref={editorRef}
                       value={markdownText}
                       onChange={onEditorChange}
+                      onHistoryStateChange={setEditorHistoryState}
                     />
                   </div>
                 </div>

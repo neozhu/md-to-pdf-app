@@ -13,4 +13,13 @@ describe("Markdown dashboard AI review profile flow", () => {
     expect(source).toContain("selectedReviewProfile");
     expect(source).toContain("profile: selectedReviewProfile");
   });
+
+  it("wires CodeMirror history state and commands into the header", () => {
+    expect(source).toContain("React.useRef<MdEditorHandle>(null)");
+    expect(source).toContain("onHistoryStateChange={setEditorHistoryState}");
+    expect(source).toContain("canUndo={editorHistoryState.canUndo}");
+    expect(source).toContain("canRedo={editorHistoryState.canRedo}");
+    expect(source).toContain("onUndo={onUndo}");
+    expect(source).toContain("onRedo={onRedo}");
+  });
 });

@@ -8,6 +8,8 @@ import {
   LogOut,
   Menu,
   Printer,
+  Redo2,
+  Undo2,
   WandSparkles,
 } from "lucide-react";
 
@@ -24,6 +26,10 @@ type MdDashboardHeaderProps = {
   onOpenSidebar: () => void;
   fileName: string;
   onFileNameChange: (value: string) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   isBusy: boolean;
   canExport: boolean;
   exportingAction: "download" | "print" | null;
@@ -43,6 +49,10 @@ export function MdDashboardHeader({
   onOpenSidebar,
   fileName,
   onFileNameChange,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   isBusy,
   canExport,
   exportingAction,
@@ -104,13 +114,43 @@ export function MdDashboardHeader({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Input
-            value={fileName}
-            onChange={(e) => onFileNameChange(e.target.value)}
-            className="w-[180px] sm:w-[200px] md:w-[220px]"
-            placeholder="export.pdf"
-            aria-label="PDF file name"
-          />
+          <div className="flex items-center gap-1">
+            <Input
+              value={fileName}
+              onChange={(e) => onFileNameChange(e.target.value)}
+              className="w-[180px] sm:w-[200px] md:w-[220px]"
+              placeholder="export.pdf"
+              aria-label="PDF file name"
+            />
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label="Editor history controls"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={!canUndo}
+                onClick={onUndo}
+                aria-label="Undo"
+                title="Undo"
+              >
+                <Undo2 className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={!canRedo}
+                onClick={onRedo}
+                aria-label="Redo"
+                title="Redo"
+              >
+                <Redo2 className="size-4" />
+              </Button>
+            </div>
+          </div>
 
           {!canSplit && (
             <div className="flex items-center rounded-lg border bg-card p-1">
