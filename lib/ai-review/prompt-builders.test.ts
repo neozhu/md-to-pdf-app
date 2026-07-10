@@ -30,26 +30,25 @@ const structureSignals: StructureSignals = {
 };
 
 describe("AI review prompt builders", () => {
-  it("does not include needsEdit in the reviewer output contract", () => {
+  it("relies on structured output instead of repeating a JSON contract", () => {
     const prompt = buildReviewerPrompt({
       markdown: "# Release\n\nShip it.",
       structureSignals,
     });
 
-    expect(prompt).toContain(
-      "Output JSON only: { review, keyImprovements, rewritePlan }.",
-    );
+    expect(prompt).not.toContain("Output JSON only");
     expect(prompt).not.toContain("needsEdit");
   });
 
-  it("injects the user-approved review as the editor instruction source", () => {
-    const prompt = buildEditorPrompt({
+  it("uses the user-approved review as the sole editor brief", () => {
+    const input = {
       markdown: "# Release\n\nShip v1.2.3 from https://example.com",
       reviewerResult,
       userApprovedReview:
         "Tighten the release note intro and keep the version/link unchanged.",
       factualBaseline,
-    });
+    };
+    const prompt = buildEditorPrompt(input);
 
     expect(prompt).toContain("<user_approved_review>");
     expect(prompt).toContain(
@@ -58,5 +57,7 @@ describe("AI review prompt builders", () => {
     expect(prompt).toContain(
       "Use this user-approved review as the editing brief.",
     );
+    expect(prompt).not.toContain("<rewrite_plan>");
+    expect(prompt).not.toContain("<context>");
   });
 });

@@ -4,15 +4,9 @@
 // ---------------------------------------------------------------------------
 
 import type {
-  CodeRecoveryResult,
   FactualBaseline,
-  RawBlocksResult,
-  ReviewerResult,
   StructureSignals,
 } from "./types";
-
-const RAW_BLOCK_PREVIEW_LIMIT = 12;
-const CODE_SUGGESTION_PREVIEW_LIMIT = 8;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -21,26 +15,6 @@ const CODE_SUGGESTION_PREVIEW_LIMIT = 8;
 function listPreview(items: string[], maxItems: number) {
   const limited = items.slice(0, maxItems);
   return limited.length > 0 ? limited.join(", ") : "";
-}
-
-function summarizeRawBlockHints(rawBlocksResult: RawBlocksResult) {
-  const lines = rawBlocksResult.blocks
-    .slice(0, RAW_BLOCK_PREVIEW_LIMIT)
-    .map(
-      (block) =>
-        `- [${block.kind}] L${block.startLine}-L${block.endLine} (confidence ${block.confidence.toFixed(2)}): ${block.preview}`,
-    );
-  return lines.length > 0 ? lines.join("\n") : "- none";
-}
-
-function summarizeCodeRecoveryHints(codeRecoveryResult: CodeRecoveryResult) {
-  const lines = codeRecoveryResult.suggestions
-    .slice(0, CODE_SUGGESTION_PREVIEW_LIMIT)
-    .map(
-      (suggestion) =>
-        `- L${suggestion.startLine}-L${suggestion.endLine} \`${suggestion.language || "plain"}\` (confidence ${suggestion.confidence.toFixed(2)}): ${suggestion.preview}`,
-    );
-  return lines.length > 0 ? lines.join("\n") : "- none";
 }
 
 function buildFactualConstraints(baseline: FactualBaseline): string {
@@ -64,28 +38,6 @@ function buildFactualConstraints(baseline: FactualBaseline): string {
 // Prompt builders (exported)
 // ---------------------------------------------------------------------------
 
-export function buildFormatterPrompt(params: {
-  markdown: string;
-  rawBlocksResult: RawBlocksResult;
-  codeRecoveryResult: CodeRecoveryResult;
-}) {
-  const { markdown, rawBlocksResult, codeRecoveryResult } = params;
-  return [
-    "Input Context:",
-    `- Raw block counts: total=${rawBlocksResult.blockCount}, headings=${rawBlocksResult.headingCandidateCount}, lists=${rawBlocksResult.listCandidateCount}, code=${rawBlocksResult.codeCandidateCount}`,
-    `- Recovered code block candidates: ${codeRecoveryResult.recoveredBlockCount}`,
-    "",
-    "Raw Block Hints:",
-    summarizeRawBlockHints(rawBlocksResult),
-    "",
-    "Code Recovery Hints:",
-    summarizeCodeRecoveryHints(codeRecoveryResult),
-    "",
-    "Original Raw Text:",
-    markdown,
-  ].join("\n");
-}
-
 export function buildReviewerPrompt(params: {
   markdown: string;
   structureSignals: StructureSignals;
@@ -93,9 +45,6 @@ export function buildReviewerPrompt(params: {
   const { markdown, structureSignals } = params;
   const cues = structureSignals.cues.join(", ");
   return [
-    "Review the markdown below. Detect the content language and evaluate in that language.",
-    "Output JSON only: { review, keyImprovements, rewritePlan }.",
-    "",
     ...(cues ? [`Structural cues: ${cues}`, ""] : []),
     "<markdown>",
     markdown,
@@ -105,34 +54,17 @@ export function buildReviewerPrompt(params: {
 
 export function buildEditorPrompt(params: {
   markdown: string;
-  reviewerResult: ReviewerResult;
-  userApprovedReview?: string;
+  userApprovedReview: string;
   factualBaseline: FactualBaseline;
 }) {
-  const { markdown, reviewerResult, userApprovedReview, factualBaseline } = params;
+  const { markdown, userApprovedReview, factualBaseline } = params;
   const constraints = buildFactualConstraints(factualBaseline);
-  const approvedReview = userApprovedReview?.trim();
+  const approvedReview = userApprovedReview.trim();
   return [
-    ...(approvedReview
-      ? [
-          "<user_approved_review>",
-          "Use this user-approved review as the editing brief.",
-          approvedReview,
-          "</user_approved_review>",
-          "",
-        ]
-      : []),
-    "<rewrite_plan>",
-    `Summary: ${reviewerResult.review}`,
-    "",
-    "Steps (execute in order):",
-    ...reviewerResult.rewritePlan.map((step, i) => `${i + 1}. ${step}`),
-    "</rewrite_plan>",
-    "",
-    "<context>",
-    "Problems identified (for reference only — do NOT use as editing instructions):",
-    ...reviewerResult.keyImprovements.map((item, i) => `${i + 1}. ${item}`),
-    "</context>",
+    "<user_approved_review>",
+    "Use this user-approved review as the editing brief.",
+    approvedReview,
+    "</user_approved_review>",
     "",
     ...(constraints ? [constraints, ""] : []),
     "<markdown>",

@@ -4,7 +4,7 @@
 
 # Markdown to PDF Converter
 
-A Next.js 16 app to edit Markdown, run adaptive AI review, and export clean PDFs.
+A Next.js 16 app to edit Markdown, run human-approved AI review, and export clean PDFs.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-16.1-black)
@@ -27,7 +27,7 @@ When saving high-quality online content by copy/paste, heading hierarchy, lists,
 - Live split editor + preview with GFM support and syntax highlighting
 - High-quality PDF generation via Puppeteer (Chrome)
 - **Copy to clipboard for OneNote** — one-click copy with inline-styled HTML so content pastes into OneNote (and Word/Outlook) with full formatting preserved
-- Adaptive AI review pipeline (formatter route or reviewer+editor route)
+- Staged AI review pipeline (reviewer → user approval → editor)
 - Live progress updates over SSE (`stage`, `result`, `error`)
 - Per-user document history with Supabase Auth + RLS, dark mode, responsive UI
 - Docker/Docker Compose deployment ready
@@ -58,10 +58,11 @@ pnpm build
 pnpm start
 ```
 
-## AI Review (Adaptive Agent Workflow)
+## AI Review (Human-Approved Agent Workflow)
 
-- **Branch A - Structure Recovery**: for unstructured/plain-text or code-like input, run formatter pass.
-- **Branch B - Review + Edit**: reviewer returns strict JSON plan, editor polishes with factual constraints.
+- **Review**: the reviewer returns a structured, conservative edit plan.
+- **Approval**: the user can edit or reject the review before any document change.
+- **Polish**: the editor applies only the approved brief, then factual guards inspect the result.
 - **Safe Apply Flow**: UI receives `polishedMarkdown`, `changed`, `tokenUsage`, and `toolInsights`; user accepts or keeps original.
 
 

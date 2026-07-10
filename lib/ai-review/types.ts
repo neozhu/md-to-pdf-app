@@ -3,7 +3,7 @@
 // Used by both the API route (server) and frontend components (client).
 // ---------------------------------------------------------------------------
 
-export type WorkflowRoute = "BRANCH_A" | "BRANCH_B";
+export type WorkflowRoute = "REVIEW_THEN_POLISH";
 
 export type ReviewerResult = {
   review: string;
@@ -150,7 +150,7 @@ export type PrecomputedWorkflowContext = {
   factualBaseline: FactualBaseline;
 };
 
-export type OpenAIStage = "formatter" | "reviewer" | "editor";
+export type OpenAIStage = "reviewer" | "editor";
 
 // ---------------------------------------------------------------------------
 // Client-facing types (consumed by frontend components).

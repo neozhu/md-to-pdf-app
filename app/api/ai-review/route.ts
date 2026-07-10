@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createOpenAI } from "@ai-sdk/openai";
-import { runDualAgentReview, runPolishPass, runReviewPass } from "@/lib/ai-review";
+import { runPolishPass, runReviewPass } from "@/lib/ai-review";
 import { DEFAULT_AI_REVIEW_MODEL } from "@/lib/openai-models";
 import { resolveReviewProfileId } from "@/lib/ai-review/review-profile-options";
 
@@ -58,6 +58,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (mode !== "review" && mode !== "polish") {
+      return NextResponse.json(
+        { error: "Unsupported AI review mode." },
+        { status: 400 },
+      );
+    }
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -78,7 +85,7 @@ export async function POST(req: Request) {
       new URL(req.url).searchParams.get("stream") === "1";
 
     const runSelectedMode = (options?: {
-      onStage?: Parameters<typeof runDualAgentReview>[0]["onStage"];
+      onStage?: Parameters<typeof runReviewPass>[0]["onStage"];
       abortSignal?: AbortSignal;
     }) => {
       if (mode === "review") {
@@ -91,22 +98,12 @@ export async function POST(req: Request) {
           abortSignal: options?.abortSignal,
         });
       }
-      if (mode === "polish") {
-        if (typeof review !== "string" || !review.trim()) {
-          throw new Error("Missing review instructions for polish pass.");
-        }
-        return runPolishPass({
-          markdown,
-          userApprovedReview: review,
-          model,
-          openai,
-          profile: reviewProfileId,
-          onStage: options?.onStage,
-          abortSignal: options?.abortSignal,
-        });
+      if (typeof review !== "string" || !review.trim()) {
+        throw new Error("Missing review instructions for polish pass.");
       }
-      return runDualAgentReview({
+      return runPolishPass({
         markdown,
+        userApprovedReview: review,
         model,
         openai,
         profile: reviewProfileId,
