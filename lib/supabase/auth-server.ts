@@ -41,6 +41,36 @@ type Database = {
         };
         Relationships: [];
       };
+      review_profiles: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          reviewer_guidance: string;
+          editor_guidance: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description: string;
+          reviewer_guidance: string;
+          editor_guidance: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string;
+          reviewer_guidance?: string;
+          editor_guidance?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
