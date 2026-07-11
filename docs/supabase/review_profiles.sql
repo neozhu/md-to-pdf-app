@@ -43,22 +43,48 @@ insert into public.review_profiles (
 (
   '00000000-0000-4000-8000-000000000001',
   'General',
-  'Balanced review for clarity, structure, and tone.',
-  'Review as a general professional document. Prioritize clear structure, unambiguous wording, and consistent tone without imposing a specialized style.',
-  'Apply only targeted edits that improve clarity, structure, or tone while preserving the author''s intent.'
+  'Balanced professional review of purpose, structure, clarity, consistency, and tone.',
+  'Review this as a general professional document for readers who need to understand its purpose and act with confidence.
+
+Prioritize:
+- whether the purpose and main takeaway are clear early;
+- whether headings, paragraphs, and transitions create a coherent reading path;
+- ambiguous, dense, or internally inconsistent wording; and
+- inconsistent terminology, scope, or tone that could reduce understanding or trust.
+
+Use a balanced reporting threshold. Report only issues with a clear reader impact. Do not impose a specialized style or suggest cosmetic polish.',
+  'Apply only the approved, localized changes needed to improve purpose, structure, clarity, terminology consistency, or professional tone. Preserve the author''s meaning, voice, factual claims, examples, and all unaffected text.'
 ),
 (
   '00000000-0000-4000-8000-000000000002',
   'Technical Doc',
-  'Focus on technical accuracy, steps, terminology, and code blocks.',
-  'Review as technical documentation. Prioritize technical documentation clarity, prerequisite gaps, step ordering, terminology consistency, command/code readability, and warnings where a reader could implement the wrong thing.',
-  'Preserve technical accuracy. Do not change commands, identifiers, APIs, paths, flags, versions, code blocks, or configuration values unless the approved review explicitly instructs a correction.'
+  'Higher-recall review of prerequisites, procedures, code/prose consistency, and operational ambiguity.',
+  'Review this as technical documentation for readers who may rely on it to understand, configure, implement, or operate a system.
+
+Use higher recall for issues that could block or mislead implementation. Prioritize:
+- missing prerequisites, assumptions, dependencies, permissions, or environment requirements implied by later steps or stated elsewhere in the document;
+- incorrect, ambiguous, or unsafe step order visible from the documented procedure;
+- inconsistencies between prose, commands, code, configuration, identifiers, paths, flags, APIs, and versions;
+- missing expected results, failure conditions, warnings, or recovery guidance where the document shows that readers could act incorrectly; and
+- terminology drift and references whose targets are unclear.
+
+Distinguish a document-supported defect from an externally unverifiable concern. Do not invent technical corrections or rewrite valid code for style.',
+  'Apply only approved corrections. Preserve technical behavior and do not change commands, code, identifiers, APIs, paths, flags, versions, configuration values, or factual claims unless the approved review explicitly identifies that exact change. Keep steps executable and code blocks valid.'
 ),
 (
   '00000000-0000-4000-8000-000000000003',
   'Academic / Formal',
-  'Focus on logic, formality, transitions, and restrained wording.',
-  'Review as academic or formal writing. Prioritize argument flow, paragraph transitions, claim support, formality, and vague wording. Avoid marketing-style rewrites.',
-  'Keep the tone formal and restrained. Improve logical transitions and precision without making the prose promotional or changing claims.'
+  'Formal review of argument flow, evidence-to-conclusion logic, qualification, and precision.',
+  'Review this as academic or formal writing for readers evaluating the argument''s clarity, coherence, and support.
+
+Prioritize:
+- an unclear thesis, purpose, or scope;
+- gaps between claims, evidence, reasoning, and conclusions;
+- unsupported leaps, overstatement, missing qualification, or internal contradiction visible in the text;
+- weak paragraph progression, transitions, or referents that obscure the argument; and
+- imprecise terminology, inconsistent definitions, or tone that is promotional, informal, or stronger than the evidence supports.
+
+Do not require a particular citation style or claim external factual errors unless the document supplies the evidence. Avoid marketing-style rewrites.',
+  'Apply only approved changes that improve argument flow, qualification, transitions, terminology, and formal precision. Preserve claims, evidence, citations, scope, and disciplinary meaning. Do not strengthen conclusions or introduce new support.'
 )
 on conflict (id) do nothing;

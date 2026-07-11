@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import type { ReviewProfile } from "../review-profiles";
@@ -42,5 +43,19 @@ describe("AI review profiles", () => {
     expect(buildEditorInstructions(profile)).toContain(
       "The review profile supplements the core policy.",
     );
+  });
+
+  it("seeds distinct professional review rubrics", () => {
+    const sql = readFileSync("docs/supabase/review_profiles.sql", "utf8");
+
+    expect(sql).toContain("Use a balanced reporting threshold");
+    expect(sql).toContain("Use higher recall for issues that could block");
+    expect(sql).toContain(
+      "gaps between claims, evidence, reasoning, and conclusions",
+    );
+    expect(sql).toContain(
+      "Distinguish a document-supported defect from an externally unverifiable concern",
+    );
+    expect(sql).toContain("on conflict (id) do nothing");
   });
 });
