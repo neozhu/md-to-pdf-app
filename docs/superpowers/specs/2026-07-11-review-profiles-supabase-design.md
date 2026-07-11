@@ -1,10 +1,12 @@
-# Supabase Review Profiles Design
+# Design Supabase Review Profiles
 
-## Goal
+## Goal and audience
 
-Replace the hard-coded review profile list and guidance with globally shared Review Profiles stored in Supabase. Every authenticated user can list, create, update, and delete profiles. The core Reviewer and Editor policies remain in application code so database content can specialize, but cannot replace, the safety and output rules.
+This design guides the implementation of globally shared Review Profiles stored in Supabase for a personal deployment. Replace the hard-coded Profile list and guidance with authenticated CRUD operations and dynamic Profile resolution. Keep the core Reviewer and Editor policies in application code while database content supplies document-specific guidance.
 
-## Scope
+The feature is complete when an authenticated user can manage Profiles, AI Review resolves the selected database Profile, and an empty Profile list prevents Review from starting.
+
+## Define the scope
 
 This change includes:
 
@@ -34,9 +36,11 @@ Create `public.review_profiles` with these columns:
 
 There is no `owner_id`. Profile IDs are UUIDs and replace the current compile-time `ReviewProfileId` union.
 
+Enforce the four editable field limits with database `CHECK` constraints as well as API validation. Each constraint applies `btrim()` before checking for an empty value or measuring its length. This keeps direct Supabase Data API writes consistent with writes through the application API.
+
 Seed the table with the existing General, Technical Doc, and Academic / Formal Profiles. Their current descriptions and Reviewer/Editor guidance are preserved during migration.
 
-## Access Control
+## Control database access
 
 Enable Row Level Security because the table is in the exposed `public` schema.
 
@@ -48,7 +52,9 @@ Enable Row Level Security because the table is in the exposed `public` schema.
 
 The application continues using the publishable key and the authenticated user's access token. It does not introduce or expose a `service_role` key.
 
-## API Design
+This is a personal deployment with trusted authenticated users. Global Profile modification and deletion are intentional and are not part of the threat model.
+
+## Define the API
 
 Add server routes following the existing authenticated Supabase API pattern:
 
@@ -81,7 +87,7 @@ type ReviewProfile = {
 
 Input validation is limited to the real API boundary. The four editable strings are trimmed, required, and constrained to the maximum lengths in the data model. Path IDs must be valid UUIDs.
 
-## Management UI
+## Manage Profiles in the UI
 
 Add a `Manage Profiles` entry to the AI Review dialog. The management view contains:
 
@@ -92,7 +98,9 @@ Add a `Manage Profiles` entry to the AI Review dialog. The management view conta
 
 Add and Edit share one form. On success, the UI refreshes the list. A newly created Profile may become the current selection. If the selected Profile is deleted, the selection is cleared and the user must explicitly choose another Profile. The UI never silently falls back to General.
 
-### Form Guidance
+When the Profile list is empty, show an empty state with an **Add Profile** action. Disable the Review action until the user creates and selects a Profile. An empty list is valid application state, not a loading error.
+
+### Guide Profile fields
 
 The guidance below is application UI copy, not database content.
 
@@ -142,7 +150,7 @@ Only change:
 
 The first implementation uses helper text and placeholders only. It does not add a template-insertion button.
 
-## AI Review Integration
+## Integrate Profiles with AI Review
 
 The client sends only `profileId` to the AI Review API. It never sends Profile guidance or a complete system prompt.
 
@@ -154,23 +162,23 @@ For both Review and Polish, the server:
 4. passes `reviewerGuidance` to the Reviewer instruction builder or `editorGuidance` to the Editor instruction builder; and
 5. invokes the existing AI orchestration.
 
-Review and Polish each load the latest Profile content. If another user changes the Profile between the two operations, Polish uses the updated guidance. This is an accepted consequence of keeping the first version simple.
+Review and Polish each load the latest Profile content. If the Profile changes between the two operations, Polish uses the updated guidance. This last-write-wins behavior is an accepted constraint of the first version.
 
-## Prompt Composition
+## Compose AI instructions
 
-`REVIEWER_SYSTEM_PROMPT` and `EDITOR_SYSTEM_PROMPT` remain in code. They retain the role definition, trust boundary, factual constraints, output contract, and stop rules.
+Keep all core Reviewer and Editor content in code, but split each current monolithic prompt into a core preamble and a core constraints suffix. The instruction builder inserts database guidance between these two code-owned sections.
 
 Resolved instructions have three conceptual sections:
 
 1. core role and task;
 2. database Profile guidance inside a clearly delimited `<review_profile>` block; and
-3. final non-overridable core constraints and output rules.
+3. final core constraints and output rules.
 
-The instruction builder explicitly states that Profile guidance supplements the core policy and conflicting Profile instructions must be ignored. Placing the non-overridable rules after the dynamic Profile block prevents database content from being the final instruction in the system message.
+The instruction builder states that Profile guidance supplements the core policy and conflicting Profile instructions must be ignored. Placing core constraints after the dynamic Profile block keeps database content from being the final instruction in the system message. This ordering guides model behavior; it is not a deterministic enforcement mechanism.
 
 The Profile may specialize review priorities and editing constraints. It may not redefine the agent's role, remove the trust boundary, change the structured output contract, or authorize factual invention.
 
-## Error Handling
+## Handle errors and empty state
 
 | Condition | Response or UI behavior |
 | --- | --- |
@@ -180,11 +188,12 @@ The Profile may specialize review priorities and editing constraints. It may not
 | Supabase configuration failure | `500` |
 | Database operation failure | Log diagnostic details server-side and return a non-sensitive error |
 | Profile list fails to load | Disable Review start and show the error |
+| Profile list is empty | Show **Add Profile** and disable Review until a Profile exists and is selected |
 | Delete fails | Keep the Profile in the displayed list and show the error |
 
 No path silently substitutes General for an invalid, deleted, or inaccessible Profile.
 
-## Testing
+## Verify the behavior
 
 Add the narrowest tests that cover the changed behavior:
 
@@ -196,12 +205,13 @@ Add the narrowest tests that cover the changed behavior:
 - Polish loads and uses `editorGuidance` from the selected database row;
 - a missing Profile returns `404` instead of falling back to General;
 - prompt composition keeps core trust and output constraints after dynamic guidance;
-- deleting the selected Profile clears the UI selection; and
+- deleting the selected Profile clears the UI selection;
+- an empty Profile list disables Review and presents **Add Profile**;
 - the three seed Profiles preserve the current behavior.
 
 Verification should include targeted Vitest tests, lint/type checks for touched files, and a Supabase test query confirming authenticated CRUD and anonymous denial.
 
-## Migration and Rollout
+## Migrate and roll out
 
 1. Create the table, constraints, grants, RLS policies, and seed rows.
 2. Add the server data model and CRUD routes.
