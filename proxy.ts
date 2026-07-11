@@ -37,16 +37,10 @@ export async function proxy(request: NextRequest) {
         auth: { persistSession: false, autoRefreshToken: false },
       },
     );
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser(accessToken);
-      if (!error && user) {
-        userId = user.id;
-      }
-    } catch (error) {
-      console.warn("[auth] Supabase user verification failed:", error);
+    const { data, error } = await supabase.auth.getClaims(accessToken);
+    const subject = data?.claims?.sub;
+    if (!error && typeof subject === "string" && subject) {
+      userId = subject;
     }
   }
 
@@ -58,21 +52,17 @@ export async function proxy(request: NextRequest) {
         auth: { persistSession: false, autoRefreshToken: false },
       },
     );
-    try {
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: refreshToken,
-      });
-      const refreshedSession = data.session;
-      const refreshedUser = data.user;
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+    const refreshedSession = data.session;
+    const refreshedUser = data.user;
 
-      if (!error && refreshedSession && refreshedUser) {
-        userId = refreshedUser.id;
-        applySessionCookies(response, refreshedSession);
-      } else {
-        clearSessionCookies(response);
-      }
-    } catch (error) {
-      console.warn("[auth] Supabase session refresh failed:", error);
+    if (!error && refreshedSession && refreshedUser) {
+      userId = refreshedUser.id;
+      applySessionCookies(response, refreshedSession);
+    } else {
+      clearSessionCookies(response);
     }
   }
 

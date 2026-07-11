@@ -2,7 +2,6 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearSessionCookies } from "@/lib/supabase/auth-server";
 import { proxy } from "./proxy";
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -16,29 +15,31 @@ vi.mock("@/lib/supabase/auth-server", () => ({
   clearSessionCookies: vi.fn(),
 }));
 
-describe("proxy auth transport failures", () => {
+describe("proxy auth verification", () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
-  it("fails closed without clearing cookies when Supabase closes the socket", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  it("uses verified JWT claims as the authenticated user identity", async () => {
+    const getClaims = vi.fn().mockResolvedValue({
+      data: { claims: { sub: "user-1" } },
+      error: null,
+    });
     vi.mocked(createClient).mockReturnValue({
       auth: {
-        getUser: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
-        refreshSession: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
+        getClaims,
+        refreshSession: vi.fn(),
       },
     } as unknown as ReturnType<typeof createClient>);
     const request = new NextRequest("http://localhost/", {
       headers: {
-        cookie: "md_access_token=access; md_refresh_token=refresh",
+        cookie: "md_access_token=access",
       },
     });
 
     const response = await proxy(request);
 
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/login?next=%2F");
-    expect(clearSessionCookies).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(getClaims).toHaveBeenCalledWith("access");
   });
 });

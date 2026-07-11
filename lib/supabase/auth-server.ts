@@ -14,6 +14,8 @@ export type AuthCookieSession = {
   expires_in: number;
 };
 
+type AuthenticatedUser = Pick<User, "id">;
+
 type Database = {
   public: {
     Tables: {
@@ -149,7 +151,7 @@ export function clearSessionCookies(res: NextResponse) {
 }
 
 export async function getAuthenticatedUserFromCookie(): Promise<{
-  user: User | null;
+  user: AuthenticatedUser | null;
   accessToken: string | null;
   refreshedSession: AuthCookieSession | null;
 }> {
@@ -164,12 +166,10 @@ export async function getAuthenticatedUserFromCookie(): Promise<{
   const supabase = createSupabaseServerClient();
 
   if (accessToken) {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(accessToken);
-    if (!error && user) {
-      return { user, accessToken, refreshedSession: null };
+    const { data, error } = await supabase.auth.getClaims(accessToken);
+    const subject = data?.claims?.sub;
+    if (!error && typeof subject === "string" && subject) {
+      return { user: { id: subject }, accessToken, refreshedSession: null };
     }
   }
 
