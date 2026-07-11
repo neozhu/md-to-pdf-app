@@ -103,8 +103,9 @@ OPENAI_API_KEY=
 # OPENAI_BASE_URL=https://api.openai.com/v1
 # PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
-# Supabase (history persistence)
-# Create table via docs/supabase/md_history_docs.sql
+# Supabase (history and Review Profile persistence)
+# Create tables via docs/supabase/md_history_docs.sql and
+# docs/supabase/review_profiles.sql
 # NEXT_PUBLIC_SUPABASE_URL=
 # NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 ```
@@ -113,8 +114,11 @@ OPENAI_API_KEY=
 
 1. In Supabase Auth, enable Email/Password provider.
 2. Run SQL from [`docs/supabase/md_history_docs.sql`](docs/supabase/md_history_docs.sql).
-3. Start the app and open `/login` to sign in.
-4. Optional: configure `NEXT_PUBLIC_APP_URL` so password reset emails use the correct callback domain.
+3. Run SQL from [`docs/supabase/review_profiles.sql`](docs/supabase/review_profiles.sql).
+4. Start the app and open `/login` to sign in.
+5. Optional: configure `NEXT_PUBLIC_APP_URL` so password reset emails use the correct callback domain.
+
+AI Review remains disabled until at least one Review Profile exists and is selected.
 
 `/` is login-protected and history APIs are user-scoped via RLS.
 
