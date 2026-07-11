@@ -36,13 +36,6 @@ function countWords(text: string): number {
   return cjkCount + latinWords.length;
 }
 
-/** Detect and strip YAML frontmatter (--- ... ---) from text. */
-function stripFrontmatter(text: string): { body: string; hasFrontmatter: boolean } {
-  const match = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-  if (!match) return { body: text, hasFrontmatter: false };
-  return { body: text.slice(match[0].length), hasFrontmatter: true };
-}
-
 // ---------------------------------------------------------------------------
 // Structure signals
 // ---------------------------------------------------------------------------
