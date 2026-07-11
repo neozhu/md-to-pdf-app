@@ -25,4 +25,21 @@ describe("review profile manager", () => {
     expect(source).toContain("REVIEW_PROFILE_LIMITS.name");
     expect(source).toContain("REVIEW_PROFILE_LIMITS.reviewerGuidance");
   });
+
+  it("opens add and edit in a larger second dialog", () => {
+    expect(source).toContain('role="dialog"');
+    expect(source).toContain('aria-modal="true"');
+    expect(source).toContain("z-[80]");
+    expect(source).toContain("max-w-2xl");
+    expect(source).toContain("max-h-[calc(100vh-2rem)]");
+    expect(source).toContain("Add Review Profile");
+    expect(source).toContain("Edit Review Profile");
+    expect(source).toContain("min-h-40");
+  });
+
+  it("closes the form without closing the profile manager", () => {
+    expect(source).toContain("function closeForm()");
+    expect(source).toContain("onClick={closeForm}");
+    expect(source).not.toContain("{!isEditing ? (");
+  });
 });

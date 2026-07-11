@@ -74,6 +74,13 @@ export function ReviewProfileManager({
     setIsEditing(true);
   }
 
+  function closeForm() {
+    setIsEditing(false);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setError(null);
+  }
+
   function updateField(field: keyof ReviewProfileInput, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
   }
@@ -98,9 +105,7 @@ export function ReviewProfileManager({
         const created = await createReviewProfile(form);
         onProfilesChange(sortProfiles([...profiles, created]));
       }
-      setIsEditing(false);
-      setEditingId(null);
-      setForm(EMPTY_FORM);
+      closeForm();
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -130,156 +135,192 @@ export function ReviewProfileManager({
   }
 
   return (
-    <Card className="space-y-3 border p-3 shadow-none">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="font-medium">Manage Profiles</h3>
-          <p className="text-[11px] text-muted-foreground">
-            Profiles are shared across this personal deployment.
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          aria-label="Close profile manager"
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
-
-      {!isEditing ? (
-        <>
-          <div className="max-h-48 space-y-2 overflow-y-auto">
-            {profiles.length === 0 ? (
-              <p className="rounded-md border border-dashed p-3 text-muted-foreground">
-                No review profiles yet.
-              </p>
-            ) : (
-              profiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  className="flex items-start justify-between gap-3 rounded-md border p-2"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium">{profile.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {profile.description}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => beginEdit(profile)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeProfile(profile)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
+    <>
+      <Card className="space-y-3 border p-3 shadow-none">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-medium">Manage Profiles</h3>
+            <p className="text-[11px] text-muted-foreground">
+              Profiles are shared across this personal deployment.
+            </p>
           </div>
-          <Button type="button" size="sm" onClick={beginAdd}>
-            <Plus className="size-4" />
-            Add Profile
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Close profile manager"
+            onClick={onClose}
+          >
+            <X className="size-4" />
           </Button>
-        </>
-      ) : (
-        <form className="space-y-3" onSubmit={saveProfile}>
-          <ProfileField
-            id="profile-name"
-            label="Profile Name"
-            helper='Use a short document type, such as "Technical Documentation."'
-          >
-            <Input
-              id="profile-name"
-              value={form.name}
-              maxLength={REVIEW_PROFILE_LIMITS.name}
-              onChange={(event) => updateField("name", event.target.value)}
-              placeholder="Technical Documentation"
-            />
-          </ProfileField>
+        </div>
 
-          <ProfileField
-            id="profile-description"
-            label="Description"
-            helper="Explain which documents this Profile fits and its main focus."
-          >
-            <Input
-              id="profile-description"
-              value={form.description}
-              maxLength={REVIEW_PROFILE_LIMITS.description}
-              onChange={(event) =>
-                updateField("description", event.target.value)
-              }
-              placeholder="Review technical documents for accuracy and step order."
-            />
-          </ProfileField>
+        <div className="max-h-48 space-y-2 overflow-y-auto">
+          {profiles.length === 0 ? (
+            <p className="rounded-md border border-dashed p-3 text-muted-foreground">
+              No review profiles yet.
+            </p>
+          ) : (
+            profiles.map((profile) => (
+              <div
+                key={profile.id}
+                className="flex items-start justify-between gap-3 rounded-md border p-2"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">{profile.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {profile.description}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => beginEdit(profile)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeProfile(profile)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <Button type="button" size="sm" onClick={beginAdd}>
+          <Plus className="size-4" />
+          Add Profile
+        </Button>
 
-          <ProfileField
-            id="profile-reviewer-guidance"
-            label="Reviewer Guidance"
-            helper="Tell the Reviewer which problems to inspect, including priorities and issues it should not report."
-          >
-            <textarea
-              id="profile-reviewer-guidance"
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={form.reviewerGuidance}
-              maxLength={REVIEW_PROFILE_LIMITS.reviewerGuidance}
-              onChange={(event) =>
-                updateField("reviewerGuidance", event.target.value)
-              }
-              placeholder={"Review this document for [target audience].\n\nPrioritize:\n- [highest-impact issue]\n\nDo not:\n- [low-value issue]"}
-            />
-          </ProfileField>
+        {error && !isEditing ? (
+          <p className="text-destructive">{error}</p>
+        ) : null}
+      </Card>
 
-          <ProfileField
-            id="profile-editor-guidance"
-            label="Editor Guidance"
-            helper="Tell the Editor how to apply an approved review, including what to preserve and what it may change."
-          >
-            <textarea
-              id="profile-editor-guidance"
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={form.editorGuidance}
-              maxLength={REVIEW_PROFILE_LIMITS.editorGuidance}
-              onChange={(event) =>
-                updateField("editorGuidance", event.target.value)
-              }
-              placeholder={"When applying the approved review:\n\nPreserve:\n- [facts or constraints]\n\nOnly change:\n- [allowed edits]"}
-            />
-          </ProfileField>
+      {isEditing ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4 py-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="review-profile-form-title"
+        >
+          <Card className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden border shadow-2xl">
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={saveProfile}>
+              <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
+                <h3 id="review-profile-form-title" className="font-semibold">
+                  {editingId ? "Edit Review Profile" : "Add Review Profile"}
+                </h3>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Close profile form"
+                  onClick={closeForm}
+                  disabled={isSaving}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
 
-          {error ? <p className="text-destructive">{error}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setIsEditing(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" size="sm" disabled={!canSave || isSaving}>
-              {isSaving ? "Saving…" : editingId ? "Save Changes" : "Add Profile"}
-            </Button>
-          </div>
-        </form>
-      )}
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+                <ProfileField
+                  id="profile-name"
+                  label="Profile Name"
+                  helper='Use a short document type, such as "Technical Documentation."'
+                >
+                  <Input
+                    id="profile-name"
+                    value={form.name}
+                    maxLength={REVIEW_PROFILE_LIMITS.name}
+                    onChange={(event) => updateField("name", event.target.value)}
+                    placeholder="Technical Documentation"
+                    autoFocus={!editingId}
+                  />
+                </ProfileField>
 
-      {error && !isEditing ? <p className="text-destructive">{error}</p> : null}
-    </Card>
+                <ProfileField
+                  id="profile-description"
+                  label="Description"
+                  helper="Explain which documents this Profile fits and its main focus."
+                >
+                  <Input
+                    id="profile-description"
+                    value={form.description}
+                    maxLength={REVIEW_PROFILE_LIMITS.description}
+                    onChange={(event) =>
+                      updateField("description", event.target.value)
+                    }
+                    placeholder="Review technical documents for accuracy and step order."
+                  />
+                </ProfileField>
+
+                <ProfileField
+                  id="profile-reviewer-guidance"
+                  label="Reviewer Guidance"
+                  helper="Tell the Reviewer which problems to inspect, including priorities and issues it should not report."
+                >
+                  <textarea
+                    id="profile-reviewer-guidance"
+                    className="min-h-40 w-full resize-y rounded-md border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.reviewerGuidance}
+                    maxLength={REVIEW_PROFILE_LIMITS.reviewerGuidance}
+                    onChange={(event) =>
+                      updateField("reviewerGuidance", event.target.value)
+                    }
+                    placeholder={"Review this document for [target audience].\n\nPrioritize:\n- [highest-impact issue]\n\nDo not:\n- [low-value issue]"}
+                  />
+                </ProfileField>
+
+                <ProfileField
+                  id="profile-editor-guidance"
+                  label="Editor Guidance"
+                  helper="Tell the Editor how to apply an approved review, including what to preserve and what it may change."
+                >
+                  <textarea
+                    id="profile-editor-guidance"
+                    className="min-h-40 w-full resize-y rounded-md border bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.editorGuidance}
+                    maxLength={REVIEW_PROFILE_LIMITS.editorGuidance}
+                    onChange={(event) =>
+                      updateField("editorGuidance", event.target.value)
+                    }
+                    placeholder={"When applying the approved review:\n\nPreserve:\n- [facts or constraints]\n\nOnly change:\n- [allowed edits]"}
+                  />
+                </ProfileField>
+
+                {error ? <p className="text-destructive">{error}</p> : null}
+              </div>
+
+              <div className="flex justify-end gap-2 border-t px-5 py-4">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={closeForm}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={!canSave || isSaving}>
+                  {isSaving
+                    ? "Saving…"
+                    : editingId
+                      ? "Save Changes"
+                      : "Add Profile"}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      ) : null}
+    </>
   );
 }
 
