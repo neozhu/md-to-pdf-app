@@ -28,10 +28,8 @@ import type {
   AiTokenUsage,
   AiReviewResponse,
 } from "@/lib/ai-review/types";
-import {
-  REVIEW_PROFILE_OPTIONS,
-  type ReviewProfileId,
-} from "@/lib/ai-review/review-profile-options";
+import type { ReviewProfile } from "@/lib/review-profiles";
+import { listReviewProfiles } from "@/lib/review-profiles-api";
 import {
   AiReviewProgressDialog,
   type AiAgent,
@@ -278,9 +276,11 @@ export function MdDashboard() {
     string[]
   >([]);
   const [aiEditableReview, setAiEditableReview] = React.useState("");
-  const [selectedReviewProfile, setSelectedReviewProfile] = React.useState<
-    ReviewProfileId | ""
-  >("");
+  const [reviewProfiles, setReviewProfiles] = React.useState<ReviewProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = React.useState(true);
+  const [profilesError, setProfilesError] = React.useState<string | null>(null);
+  const [selectedReviewProfile, setSelectedReviewProfile] =
+    React.useState("");
   const [aiPendingDecision, setAiPendingDecision] = React.useState<
     AiPendingDecision | null
   >(null);
@@ -297,6 +297,28 @@ export function MdDashboard() {
       return current === "split" ? "editor" : current;
     });
   }, [canSplit]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setProfilesLoading(true);
+    setProfilesError(null);
+
+    listReviewProfiles(controller.signal)
+      .then(setReviewProfiles)
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setProfilesError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load review profiles.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProfilesLoading(false);
+      });
+
+    return () => controller.abort();
+  }, []);
 
   React.useEffect(() => {
     setFileName(mdFileNameToPdfFileName(history.activeDoc.mdFileName));
@@ -529,7 +551,7 @@ export function MdDashboard() {
   async function requestAiReviewStream(body: {
     mode: "review" | "polish";
     markdown: string;
-    profile?: ReviewProfileId;
+    profileId?: string;
     review?: string;
   }) {
     const res = await fetch("/api/ai-review?stream=1", {
@@ -665,7 +687,7 @@ export function MdDashboard() {
       const data = await requestAiReviewStream({
         mode: "review",
         markdown: markdownText,
-        profile: selectedReviewProfile,
+        profileId: selectedReviewProfile,
       });
 
       const summary = data.review?.trim() || "Document polished by AI editor.";
@@ -715,6 +737,10 @@ export function MdDashboard() {
       toast.error("Please keep or write review suggestions before polishing.");
       return;
     }
+    if (!selectedReviewProfile) {
+      toast.error("Please choose a review profile first.");
+      return;
+    }
 
     setIsAiReviewing(true);
     setAiDialogError(null);
@@ -731,7 +757,7 @@ export function MdDashboard() {
       const data = await requestAiReviewStream({
         mode: "polish",
         markdown: markdownText,
-        profile: selectedReviewProfile || "general",
+        profileId: selectedReviewProfile,
         review: aiEditableReview,
       });
 
@@ -1022,8 +1048,10 @@ export function MdDashboard() {
 
         <AiReviewProgressDialog
           open={isAiDialogOpen}
-          reviewProfiles={REVIEW_PROFILE_OPTIONS}
+          reviewProfiles={reviewProfiles}
           selectedReviewProfile={selectedReviewProfile}
+          profilesLoading={profilesLoading}
+          profilesError={profilesError}
           activeAgent={aiActiveAgent}
           dialogError={aiDialogError}
           dialogMessage={aiDialogMessage}
@@ -1036,6 +1064,20 @@ export function MdDashboard() {
           decisionPending={Boolean(aiPendingDecision)}
           tokenUsage={aiTokenUsage}
           isAiReviewing={isAiReviewing}
+          onProfilesChange={(profiles) => {
+            setReviewProfiles(profiles);
+            if (
+              selectedReviewProfile &&
+              !profiles.some((profile) => profile.id === selectedReviewProfile)
+            ) {
+              setSelectedReviewProfile("");
+            }
+          }}
+          onProfileSelectionCleared={(profileId) => {
+            if (selectedReviewProfile === profileId) {
+              setSelectedReviewProfile("");
+            }
+          }}
           onReviewProfileChange={setSelectedReviewProfile}
           onStartReview={onAiReview}
           onEditableReviewChange={setAiEditableReview}

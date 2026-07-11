@@ -35,12 +35,14 @@ describe("AI review progress dialog copy", () => {
     expect(source).toContain("Start Review");
     expect(source).toContain("onReviewProfileChange");
     expect(source).toContain("onStartReview");
-    expect(source).toContain("disabled={!selectedReviewProfile || isAiReviewing}");
+    expect(source).toContain("reviewProfiles.length === 0");
+    expect(source).toContain("Create a review profile before starting Review.");
+    expect(source).toContain("Manage Profiles");
   });
 
   it("shows the selected review profile after review starts", () => {
     expect(source).toContain("Selected profile");
-    expect(source).toContain("selectedProfile?.label");
+    expect(source).toContain("selectedProfile?.name");
     expect(source).toContain("selectedProfile?.description");
   });
 });

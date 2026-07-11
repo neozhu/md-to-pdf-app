@@ -1,22 +1,22 @@
 "use client";
 
+import * as React from "react";
 import type { CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { ReviewProfileId } from "@/lib/ai-review/review-profile-options";
 import type { AiAgentTokenUsage } from "@/lib/ai-review/types";
+import type { ReviewProfile } from "@/lib/review-profiles";
+import { ReviewProfileManager } from "./review-profile-manager";
 
 export type AiAgent = "reviewer" | "editor" | null;
 export type { AiAgentTokenUsage };
 
 type AiReviewProgressDialogProps = {
   open: boolean;
-  reviewProfiles: ReadonlyArray<{
-    id: ReviewProfileId;
-    label: string;
-    description: string;
-  }>;
-  selectedReviewProfile: ReviewProfileId | "";
+  reviewProfiles: ReviewProfile[];
+  selectedReviewProfile: string;
+  profilesLoading: boolean;
+  profilesError: string | null;
   activeAgent: AiAgent;
   dialogError: string | null;
   dialogMessage: string;
@@ -32,7 +32,9 @@ type AiReviewProgressDialogProps = {
     editor?: AiAgentTokenUsage;
   };
   isAiReviewing: boolean;
-  onReviewProfileChange: (value: ReviewProfileId) => void;
+  onProfilesChange: (profiles: ReviewProfile[]) => void;
+  onProfileSelectionCleared: (profileId: string) => void;
+  onReviewProfileChange: (value: string) => void;
   onStartReview: () => void;
   onEditableReviewChange: (value: string) => void;
   onPolish: () => void;
@@ -45,6 +47,8 @@ export function AiReviewProgressDialog({
   open,
   reviewProfiles,
   selectedReviewProfile,
+  profilesLoading,
+  profilesError,
   activeAgent,
   dialogError,
   dialogMessage,
@@ -57,6 +61,8 @@ export function AiReviewProgressDialog({
   decisionPending,
   tokenUsage,
   isAiReviewing,
+  onProfilesChange,
+  onProfileSelectionCleared,
   onReviewProfileChange,
   onStartReview,
   onEditableReviewChange,
@@ -65,6 +71,7 @@ export function AiReviewProgressDialog({
   onReject,
   onClose,
 }: AiReviewProgressDialogProps) {
+  const [showProfileManager, setShowProfileManager] = React.useState(false);
   if (!open) return null;
   const selectedProfile = reviewProfiles.find(
     (profile) => profile.id === selectedReviewProfile,
@@ -90,7 +97,7 @@ export function AiReviewProgressDialog({
           {!isProfileSelectionPending && selectedProfile && (
             <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs">
               <div className="font-medium text-foreground">
-                Selected profile: {selectedProfile?.label}
+                Selected profile: {selectedProfile?.name}
               </div>
               <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
                 {selectedProfile?.description}
@@ -100,11 +107,50 @@ export function AiReviewProgressDialog({
 
           {isProfileSelectionPending ? (
             <div className="space-y-3 rounded-md border p-3">
-              <div className="text-xs font-medium text-foreground">
-                Review Profile
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-foreground">
+                  Review Profile
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowProfileManager(true)}
+                >
+                  Manage Profiles
+                </Button>
               </div>
-              <div className="grid gap-2">
-                {reviewProfiles.map((profile) => {
+              {showProfileManager ? (
+                <ReviewProfileManager
+                  profiles={reviewProfiles}
+                  onProfilesChange={onProfilesChange}
+                  onSelectionCleared={onProfileSelectionCleared}
+                  onClose={() => setShowProfileManager(false)}
+                />
+              ) : profilesLoading ? (
+                <p className="rounded-md border border-dashed p-3 text-muted-foreground">
+                  Loading review profiles…
+                </p>
+              ) : profilesError ? (
+                <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive">
+                  {profilesError}
+                </p>
+              ) : reviewProfiles.length === 0 ? (
+                <div className="space-y-2 rounded-md border border-dashed p-3">
+                  <p className="text-muted-foreground">
+                    Create a review profile before starting Review.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setShowProfileManager(true)}
+                  >
+                    Add Profile
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {reviewProfiles.map((profile) => {
                   const selected = selectedReviewProfile === profile.id;
                   return (
                     <button
@@ -119,22 +165,29 @@ export function AiReviewProgressDialog({
                       }`}
                     >
                       <span className="block text-xs font-medium">
-                        {profile.label}
+                        {profile.name}
                       </span>
                       <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
                         {profile.description}
                       </span>
                     </button>
                   );
-                })}
-              </div>
+                  })}
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={onClose}>
                   Cancel
                 </Button>
                 <Button
                   onClick={onStartReview}
-                  disabled={!selectedReviewProfile || isAiReviewing}
+                  disabled={
+                    !selectedReviewProfile ||
+                    isAiReviewing ||
+                    profilesLoading ||
+                    Boolean(profilesError) ||
+                    reviewProfiles.length === 0
+                  }
                 >
                   Start Review
                 </Button>
