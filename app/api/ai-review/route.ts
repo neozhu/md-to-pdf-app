@@ -2,12 +2,34 @@ import { NextResponse } from "next/server";
 import { createOpenAI } from "@ai-sdk/openai";
 import { runPolishPass, runReviewPass } from "@/lib/ai-review";
 import { DEFAULT_AI_REVIEW_MODEL } from "@/lib/openai-models";
-import { resolveReviewProfileId } from "@/lib/ai-review/review-profile-options";
+import {
+  REVIEW_PROFILE_SELECT,
+  toReviewProfile,
+} from "@/lib/review-profiles";
+import {
+  applySessionCookies,
+  createSupabaseServerClient,
+  getAuthenticatedUserFromCookie,
+} from "@/lib/supabase/auth-server";
 
 export const runtime = "nodejs";
 
 const MAX_MARKDOWN_LEN = 120_000;
 const DEFAULT_MAX_INPUT_TOKENS = 30_000;
+
+function withRefreshedSessionCookie(
+  response: NextResponse,
+  refreshedSession: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  } | null,
+) {
+  if (refreshedSession) {
+    applySessionCookies(response, refreshedSession);
+  }
+  return response;
+}
 
 function estimateInputTokens(text: string) {
   // Heuristic: UTF-8 bytes are a better cross-language proxy than character count.
@@ -26,11 +48,11 @@ function resolveMaxInputTokens() {
 
 export async function POST(req: Request) {
   try {
-    const { markdown, mode, review, profile } = (await req.json().catch(() => ({}))) as {
+    const { markdown, mode, review, profileId } = (await req.json().catch(() => ({}))) as {
       markdown?: unknown;
       mode?: unknown;
       review?: unknown;
-      profile?: unknown;
+      profileId?: unknown;
     };
 
     if (typeof markdown !== "string" || !markdown.trim()) {
@@ -65,6 +87,42 @@ export async function POST(req: Request) {
       );
     }
 
+    if (typeof profileId !== "string" || !profileId.trim()) {
+      return NextResponse.json(
+        { error: "Missing review profile." },
+        { status: 400 },
+      );
+    }
+
+    const { user, accessToken, refreshedSession } =
+      await getAuthenticatedUserFromCookie();
+    if (!user || !accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const supabase = createSupabaseServerClient(accessToken);
+    const { data: profileRow, error: profileError } = await supabase
+      .from("review_profiles")
+      .select(REVIEW_PROFILE_SELECT)
+      .eq("id", profileId)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("[api/ai-review] Profile lookup failed:", profileError);
+      return NextResponse.json(
+        { error: "Failed to load review profile." },
+        { status: 500 },
+      );
+    }
+    if (!profileRow) {
+      return NextResponse.json(
+        { error: "Review profile not found." },
+        { status: 404 },
+      );
+    }
+
+    const reviewProfile = toReviewProfile(profileRow);
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -74,7 +132,6 @@ export async function POST(req: Request) {
     }
 
     const model = process.env.OPENAI_MODEL ?? DEFAULT_AI_REVIEW_MODEL;
-    const reviewProfileId = resolveReviewProfileId(profile);
     const baseUrl = process.env.OPENAI_BASE_URL;
     const openai = createOpenAI({
       apiKey,
@@ -93,7 +150,7 @@ export async function POST(req: Request) {
           markdown,
           model,
           openai,
-          profile: reviewProfileId,
+          profile: reviewProfile,
           onStage: options?.onStage,
           abortSignal: options?.abortSignal,
         });
@@ -106,7 +163,7 @@ export async function POST(req: Request) {
         userApprovedReview: review,
         model,
         openai,
-        profile: reviewProfileId,
+        profile: reviewProfile,
         onStage: options?.onStage,
         abortSignal: options?.abortSignal,
       });
@@ -114,7 +171,10 @@ export async function POST(req: Request) {
 
     if (!wantsStream) {
       const result = await runSelectedMode({ abortSignal: req.signal });
-      return NextResponse.json(result);
+      return withRefreshedSessionCookie(
+        NextResponse.json(result),
+        refreshedSession,
+      );
     }
 
     const encoder = new TextEncoder();
@@ -170,14 +230,14 @@ export async function POST(req: Request) {
       },
     });
 
-    return new Response(stream, {
+    return withRefreshedSessionCookie(new NextResponse(stream, {
       status: 200,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
       },
-    });
+    }), refreshedSession);
   } catch (error) {
     console.error("[api/ai-review] Error:", error);
     return NextResponse.json({ error: "AI review failed." }, { status: 500 });

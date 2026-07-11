@@ -10,13 +10,21 @@ describe("AI review API route profile handling", () => {
     expect(source).toContain("Unsupported AI review mode.");
   });
 
-  it("parses and resolves the requested review profile", () => {
-    expect(source).toContain("profile?: unknown");
-    expect(source).toContain("resolveReviewProfileId(profile)");
+  it("requires authentication before running AI review", () => {
+    expect(source).toContain("getAuthenticatedUserFromCookie");
+    expect(source).toContain("status: 401");
+  });
+
+  it("loads the requested profile and returns 404 when missing", () => {
+    expect(source).toContain("profileId?: unknown");
+    expect(source).toContain('.from("review_profiles")');
+    expect(source).toContain('.eq("id", profileId)');
+    expect(source).toContain("status: 404");
+    expect(source).not.toContain("resolveReviewProfileId");
   });
 
   it("passes the resolved profile into review and polish modes", () => {
-    expect(source).toContain("reviewProfileId");
-    expect(source).toContain("profile: reviewProfileId");
+    expect(source).toContain("reviewProfile");
+    expect(source).toContain("profile: reviewProfile");
   });
 });

@@ -1,48 +1,46 @@
 import { describe, expect, it } from "vitest";
 
+import type { ReviewProfile } from "../review-profiles";
 import {
   buildEditorInstructions,
   buildReviewerInstructions,
 } from "./review-profiles";
-import {
-  resolveReviewProfileId,
-  REVIEW_PROFILE_OPTIONS,
-} from "./review-profile-options";
-import { EDITOR_SYSTEM_PROMPT, REVIEWER_SYSTEM_PROMPT } from "./prompts";
+
+const profile: ReviewProfile = {
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  name: "Technical Documentation",
+  description: "Technical review.",
+  reviewerGuidance: "Check prerequisites and step order.",
+  editorGuidance: "Preserve commands and identifiers.",
+};
 
 describe("AI review profiles", () => {
-  it("keeps review profile options in one editable configuration", () => {
-    expect(REVIEW_PROFILE_OPTIONS.map((profile) => profile.id)).toEqual([
-      "general",
-      "technical-doc",
-      "academic-formal",
-    ]);
-    expect(REVIEW_PROFILE_OPTIONS.every((profile) => profile.label)).toBe(true);
-    expect(REVIEW_PROFILE_OPTIONS.every((profile) => profile.description)).toBe(true);
+  it("places reviewer guidance before final core constraints", () => {
+    const instructions = buildReviewerInstructions(profile);
+
+    expect(instructions).toContain(`<review_profile id="${profile.id}">`);
+    expect(instructions).toContain(profile.reviewerGuidance);
+    expect(instructions.indexOf(profile.reviewerGuidance)).toBeLessThan(
+      instructions.indexOf("<trust_boundary>"),
+    );
   });
 
-  it("falls back to general for unknown profile ids", () => {
-    expect(resolveReviewProfileId("technical-doc")).toBe("technical-doc");
-    expect(resolveReviewProfileId("unknown-profile")).toBe("general");
-    expect(resolveReviewProfileId(undefined)).toBe("general");
+  it("uses editor guidance without reviewer guidance", () => {
+    const instructions = buildEditorInstructions(profile);
+
+    expect(instructions).toContain(profile.editorGuidance);
+    expect(instructions).not.toContain(profile.reviewerGuidance);
+    expect(instructions.indexOf(profile.editorGuidance)).toBeLessThan(
+      instructions.indexOf("<trust_boundary>"),
+    );
   });
 
-  it("builds reviewer and editor instructions from base prompts plus profile guidance", () => {
-    const reviewerInstructions = buildReviewerInstructions("technical-doc");
-    const editorInstructions = buildEditorInstructions("technical-doc");
-
-    expect(reviewerInstructions).toContain(REVIEWER_SYSTEM_PROMPT);
-    expect(editorInstructions).toContain(EDITOR_SYSTEM_PROMPT);
-    expect(reviewerInstructions).toContain("<review_profile id=\"technical-doc\">");
-    expect(editorInstructions).toContain("<review_profile id=\"technical-doc\">");
-    expect(reviewerInstructions).toContain("technical documentation");
-    expect(editorInstructions).toContain("technical accuracy");
-  });
-
-  it("keeps public profile options separate from system prompt text", () => {
-    const serializedOptions = JSON.stringify(REVIEW_PROFILE_OPTIONS);
-
-    expect(serializedOptions).not.toContain(REVIEWER_SYSTEM_PROMPT);
-    expect(serializedOptions).not.toContain(EDITOR_SYSTEM_PROMPT);
+  it("states that profile guidance cannot replace the core policy", () => {
+    expect(buildReviewerInstructions(profile)).toContain(
+      "The review profile supplements the core policy.",
+    );
+    expect(buildEditorInstructions(profile)).toContain(
+      "The review profile supplements the core policy.",
+    );
   });
 });

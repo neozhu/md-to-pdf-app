@@ -14,11 +14,11 @@ import type {
   ReviewerResult,
   StageEvent,
 } from "./types";
+import type { ReviewProfile } from "../review-profiles";
 import {
   buildEditorInstructions,
   buildReviewerInstructions,
 } from "./review-profiles";
-import type { ReviewProfileId } from "./review-profile-options";
 import {
   buildStructureSignals,
   parseRawBlocks,
@@ -286,7 +286,7 @@ export async function runReviewPass(params: {
   markdown: string;
   model: string;
   openai: ReturnType<typeof createOpenAI>;
-  profile: ReviewProfileId;
+  profile: ReviewProfile;
   onStage?: (event: StageEvent) => void;
   abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
@@ -378,7 +378,7 @@ export async function runPolishPass(params: {
   userApprovedReview: string;
   model: string;
   openai: ReturnType<typeof createOpenAI>;
-  profile: ReviewProfileId;
+  profile: ReviewProfile;
   onStage?: (event: StageEvent) => void;
   abortSignal?: AbortSignal;
 }): Promise<AiReviewPayload> {
