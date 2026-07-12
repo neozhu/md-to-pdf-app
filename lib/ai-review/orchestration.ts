@@ -247,14 +247,23 @@ function getOpenAIProviderOptions(stage: OpenAIStage) {
   } as const;
 }
 
-function estimateMaxTokens(stage: OpenAIStage, inputLength: number): number {
-  // Reasoning models (e.g. gpt-5-mini) count reasoning tokens against
-  // maxOutputTokens, so the budget must include headroom for internal
-  // chain-of-thought on top of the actual output tokens.
-  if (stage === "reviewer") return 4096; // JSON ~300 tokens + reasoning ~2-3k
-  // ~3 chars/token (conservative blend of English & CJK), 1.5x headroom for added markup
-  const estimated = Math.ceil((inputLength / 3) * 1.5);
-  return Math.max(2048, Math.min(16384, estimated));
+const REVIEWER_MAX_TOKENS = 8192;
+const EDITOR_MIN_TOKENS = 8192;
+const EDITOR_MAX_TOKENS = 32768;
+const EDITOR_REASONING_TOKENS = 4096;
+const ESTIMATED_CHARS_PER_TOKEN = 3;
+
+export function estimateMaxTokens(
+  stage: OpenAIStage,
+  inputLength: number,
+): number {
+  if (stage === "reviewer") return REVIEWER_MAX_TOKENS;
+
+  const estimatedOutputTokens = Math.ceil(
+    inputLength / ESTIMATED_CHARS_PER_TOKEN,
+  );
+  const budget = estimatedOutputTokens + EDITOR_REASONING_TOKENS;
+  return Math.max(EDITOR_MIN_TOKENS, Math.min(EDITOR_MAX_TOKENS, budget));
 }
 
 // ---------------------------------------------------------------------------
