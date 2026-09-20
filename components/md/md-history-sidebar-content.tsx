@@ -148,38 +148,38 @@ export function MdHistorySidebarContent({
                       : "border-border/40 hover:border-border hover:bg-accent/35",
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className="truncate text-xs font-medium">
-                          {doc.mdFileName}
-                        </div>
-                        <div className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
-                          {formatRelativeTime(doc.updatedAt)}
-                        </div>
+                  <div className="min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="truncate text-xs font-medium">
+                        {doc.mdFileName}
                       </div>
-                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        {summary || "—"}
+                      <div className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground transition-opacity group-hover:opacity-0">
+                        {formatRelativeTime(doc.updatedAt)}
                       </div>
                     </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label={`Delete ${doc.mdFileName}`}
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDeleteDoc(doc.id);
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                      {summary || "—"}
+                    </div>
                   </div>
+
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+                    aria-label={`Delete ${doc.mdFileName}`}
+                    onPointerDown={(e) => {
+                      if (e.pointerType === "mouse" && e.button !== 0) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDeleteDoc(doc.id);
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
 
                   {isActive && (
                     <div className="absolute bottom-2 left-0 top-2 rounded-r bg-primary" />
