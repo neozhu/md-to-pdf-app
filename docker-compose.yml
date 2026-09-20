@@ -21,7 +21,7 @@ services:
     security_opt:
       - seccomp:unconfined
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? process.exit(0) : fetch('http://127.0.0.1:3000', { redirect: 'manual', signal: AbortSignal.timeout(5000) }).then(r2 => process.exit(r2.status < 400 ? 0 : 1))).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
